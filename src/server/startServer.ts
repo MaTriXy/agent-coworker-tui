@@ -8,6 +8,7 @@ import type { runTurn as runTurnFn } from "../agent";
 import type { AgentConfig } from "../types";
 import { loadConfig } from "../config";
 import { loadSystemPromptWithSkills } from "../prompt";
+import { ensureDefaultGlobalSkillsReady } from "../skills/defaultGlobalSkills";
 import { writeTextFileAtomic } from "../utils/atomicFile";
 
 import { AgentSession } from "./session/AgentSession";
@@ -103,7 +104,19 @@ export async function startAgentServer(
   url: string;
 }> {
   const hostname = opts.hostname ?? "127.0.0.1";
-  const env = opts.env ?? { ...process.env, AGENT_WORKING_DIR: opts.cwd };
+  const rawEnv = opts.env ?? { ...process.env, AGENT_WORKING_DIR: opts.cwd };
+  const env = {
+    ...rawEnv,
+    COWORK_DISABLE_BUILTIN_SKILLS: rawEnv.COWORK_DISABLE_BUILTIN_SKILLS ?? "1",
+  };
+
+  await ensureDefaultGlobalSkillsReady({
+    homedir: opts.homedir,
+    env,
+    log: (line) => {
+      console.warn(`[default-skills] ${line}`);
+    },
+  });
 
   const builtInDir =
     typeof env.COWORK_BUILTIN_DIR === "string" && env.COWORK_BUILTIN_DIR.trim()

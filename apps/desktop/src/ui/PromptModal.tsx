@@ -47,39 +47,39 @@ function AskPromptContent(props: {
 
   return (
     <>
-      <DialogHeader className="gap-4 bg-gradient-to-br from-primary/10 via-background to-background px-6 py-5">
-        <Badge variant="secondary" className="w-fit border-border/70 bg-background/80 text-foreground shadow-sm">
+      <DialogHeader className="gap-3 border-b border-border/60 bg-gradient-to-br from-primary/8 via-background to-background px-5 py-4">
+        <Badge variant="secondary" className="w-fit border-border/60 bg-background/80 text-foreground shadow-none">
           <SparklesIcon className="mr-1 size-3.5" />
           Need your input
         </Badge>
         <div className="flex items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/85 shadow-sm">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background/85">
             <MessageSquareIcon className="size-4 text-primary" />
           </div>
-          <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex min-w-0 flex-col gap-1">
             <DialogTitle className="text-xl font-semibold tracking-tight">Question</DialogTitle>
-            <DialogDescription className="whitespace-pre-wrap text-sm leading-6 text-foreground/80">
+            <DialogDescription className="whitespace-pre-wrap text-sm leading-6 text-foreground/78">
               {questionText}
             </DialogDescription>
           </div>
         </div>
       </DialogHeader>
 
-      <div className="flex max-h-[min(70vh,32rem)] flex-col gap-5 overflow-y-auto px-6 py-5">
+      <div className="flex flex-col gap-4 px-5 py-4">
         {hasOptions ? (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 Suggested replies
               </div>
               <div className="text-xs text-muted-foreground">Choose one to answer instantly.</div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2">
               {opts.map((option) => (
                 <Button
                   key={option}
                   variant="outline"
-                  className="h-auto justify-start rounded-full border-border/70 bg-background/80 px-3.5 py-2 text-left text-sm shadow-sm hover:bg-muted/65"
+                  className="h-auto w-full justify-start rounded-2xl border-border/60 bg-background/80 px-4 py-3 text-left text-sm leading-5 whitespace-normal shadow-none hover:bg-muted/45"
                   type="button"
                   onClick={() => props.answerAsk(props.modal.threadId, props.modal.prompt.requestId, option)}
                 >
@@ -90,7 +90,7 @@ function AskPromptContent(props: {
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/20 p-3">
+        <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/16 p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {hasOptions ? "Custom answer" : "Your answer"}
@@ -107,14 +107,14 @@ function AskPromptContent(props: {
                   submitFreeText();
                 }
               }}
-              className="h-11 rounded-xl border-border/70 bg-background shadow-none"
+              className="h-10 rounded-xl border-border/60 bg-background shadow-none"
               placeholder={hasOptions ? "Or type a custom answer..." : "Type your answer..."}
               aria-label="Custom answer"
               autoFocus={!hasOptions}
             />
             <Button
               type="button"
-              className="h-11 rounded-xl px-4"
+              className="h-10 rounded-xl px-4"
               disabled={!freeText.trim()}
               onClick={submitFreeText}
             >
@@ -123,10 +123,10 @@ function AskPromptContent(props: {
           </div>
         </div>
 
-        <DialogFooter className="border-t border-border/60 pt-4">
+        <DialogFooter className="border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
           <Button
             variant="ghost"
-            className="mr-auto text-muted-foreground hover:text-foreground"
+            className="mr-auto px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
             type="button"
             onClick={skip}
           >
@@ -159,7 +159,7 @@ export function PromptModal() {
     }}>
       {modal ? (
         <DialogContent
-          className={modal.kind === "ask" ? "w-[min(96vw,44rem)] max-h-[85vh] gap-0 overflow-hidden p-0" : undefined}
+          className={modal.kind === "ask" ? "w-[min(96vw,50rem)] max-h-[88vh] gap-0 overflow-hidden p-0" : undefined}
           onEscapeKeyDown={isAsk ? () => {
             // Let the onOpenChange handler deal with it so a response is sent.
           } : undefined}

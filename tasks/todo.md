@@ -1,3 +1,76 @@
+# Task: Move default skill bootstrap into shared runtime startup and expose installed skills to file tools
+
+## Plan
+- [x] Inspect the current skill bootstrap path and move the default-skill install flow out of the desktop wrapper into shared runtime startup.
+- [x] Ensure all supported runtime entrypoints (desktop, TUI, CLI, server, harness) use the same one-time curated-skill bootstrap in `~/.cowork/skills`.
+- [x] Allow read-only file tools to browse installed skills, then verify runtime behavior and update docs/task notes to match the new model.
+
+## Review
+- Before this change, the one-time GitHub bootstrap existed only in desktop startup. TUI, CLI, server, and harness code paths still depended on their own config loading behavior, and normal `read`/`glob`/`grep` access still could not browse installed skill references under `~/.cowork/skills`.
+- Added `/Users/mweinbach/Projects/agent-coworker/src/skills/defaultGlobalSkills.ts`, which owns the one-time curated bootstrap for `spreadsheet`, `slides`, `pdf`, and `doc`. It downloads those skills from `openai/skills` into `~/.cowork/skills`, writes `~/.cowork/config/default-global-skills.json`, memoizes per home directory, and skips later launches unless the bootstrap is explicitly forced.
+- Updated `/Users/mweinbach/Projects/agent-coworker/src/store/connections.ts` so `AiCoworkerPaths` includes `skillsDir`, and `ensureAiCoworkerHome()` now creates `~/.cowork/skills` as part of the standard Cowork home bootstrap.
+- Moved ownership of the default-skill bootstrap into `/Users/mweinbach/Projects/agent-coworker/src/server/startServer.ts`. Shared server startup now calls `ensureDefaultGlobalSkillsReady(...)` before `loadConfig(...)` and defaults `COWORK_DISABLE_BUILTIN_SKILLS=1`, which means desktop, TUI, CLI, and server entrypoints all use the same shared runtime behavior because they all route through `startAgentServer(...)`.
+- Updated `/Users/mweinbach/Projects/agent-coworker/scripts/run_raw_agent_loops.ts` so the raw harness also installs default skills through the same shared bootstrap, preserves the shared/global skill search order, and stops reintroducing the built-in repo `skills/` directory into harness configs when built-in skills are disabled.
+- Removed the desktop-only ownership from `/Users/mweinbach/Projects/agent-coworker/apps/desktop/electron/services/serverManager.ts`. Desktop now just passes through process env and relies on shared startup like every other runtime instead of running a separate bootstrap wrapper.
+- Updated `/Users/mweinbach/Projects/agent-coworker/src/config.ts`, `/Users/mweinbach/Projects/agent-coworker/src/prompt.ts`, and `/Users/mweinbach/Projects/agent-coworker/src/tools/skill.ts` so runtime config, the system prompt, and the `skill` tool all reflect the actual active search order when built-in skills are disabled and global skills live in `~/.cowork/skills`.
+- Updated `/Users/mweinbach/Projects/agent-coworker/src/utils/permissions.ts` so read-only file tools now include configured `skillsDirs` in their allowed roots. That means `read`, `glob`, and `grep` can inspect installed skills under `~/.cowork/skills` for references/examples/assets, while `write`/`edit`/`notebookEdit` remain limited to the project/output/upload roots.
+- Desktop packaging still excludes bundled skills: `/Users/mweinbach/Projects/agent-coworker/scripts/build_desktop_resources.ts` removes stale `dist/skills`, and `/Users/mweinbach/Projects/agent-coworker/apps/desktop/README.md` now documents that default skills come from the shared runtime bootstrap into `~/.cowork/skills`.
+- Added or updated regression coverage in `/Users/mweinbach/Projects/agent-coworker/test/default-global-skills.test.ts`, `/Users/mweinbach/Projects/agent-coworker/test/config.test.ts`, `/Users/mweinbach/Projects/agent-coworker/test/permissions.test.ts`, `/Users/mweinbach/Projects/agent-coworker/test/prompt.test.ts`, `/Users/mweinbach/Projects/agent-coworker/test/server.test.ts`, `/Users/mweinbach/Projects/agent-coworker/test/server.toolstream.test.ts`, and `/Users/mweinbach/Projects/agent-coworker/apps/desktop/test/server-manager.test.ts` for:
+  - first-run install into `~/.cowork/skills`
+  - one-time/no-reinstall behavior after the bootstrap state file exists
+  - config omission of built-in skills when shared startup disables them
+  - shared server startup using the global-skill path
+  - prompt/skill search-order text matching runtime config
+  - read access to configured `skillsDirs`
+  - desktop startup no longer carrying a separate bootstrap layer
+- Verification:
+  - `~/.bun/bin/bun test test/default-global-skills.test.ts test/config.test.ts test/permissions.test.ts test/prompt.test.ts test/server.test.ts test/server.toolstream.test.ts apps/desktop/test/server-manager.test.ts` -> pass (`225 pass, 0 fail`)
+  - `~/.bun/bin/bun run build:desktop-resources` -> pass; `dist/skills` is no longer present after the build
+  - `~/.bun/bin/bun test` -> pass (`1705 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+
+---
+
+# Task: Replace bundled repo skills with curated OpenAI spreadsheet, slides, pdf, and doc skills
+
+## Plan
+- [x] Fetch the exact upstream curated `spreadsheet`, `slides`, `pdf`, and `doc` skill directories referenced by the user.
+- [x] Replace the repo's bundled `skills/spreadsheet`, `skills/slides`, `skills/pdf`, and `skills/doc` directories with those upstream copies.
+- [x] Verify the resulting skill tree and diff, then record the replacement results here.
+
+## Review
+- Replaced the repo-bundled `skills/spreadsheet`, `skills/slides`, `skills/pdf`, and `skills/doc` directories with the exact contents from the curated upstream paths the user specified under `openai/skills` (`skills/.curated/{spreadsheet,slides,pdf,doc}`).
+- Confirmed before replacement that repo code does not depend on the older local slide skill layout, so a wholesale directory swap was the correct fix instead of trying to merge files between the old and new structures.
+- The biggest structural change is `skills/slides`: the older repo-specific root-level helper files and `pptxgenjs_helpers/` directory were removed in favor of the curated upstream layout with `agents/`, `assets/`, `references/`, and `scripts/`. The repo now carries the upstream `detect_font.py`, `LICENSE.txt`, asset bundle, and helper reference files exactly where the curated skill expects them.
+- Verified exact parity with the fetched upstream sources using recursive directory diffs for all four skills (`diff -rq` against the cloned `openai/skills` checkout). Those checks returned clean, so the local bundled copies match the requested upstream source trees byte-for-byte.
+- Verified the repo after replacement:
+  - `~/.bun/bin/bun test` -> pass (`1698 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+  - `find skills -maxdepth 2 -mindepth 1 | sort` confirms the bundled skill root now contains only `doc`, `pdf`, `slides`, and `spreadsheet`, with the curated upstream subdirectory layout for each.
+
+---
+
+# Task: Clean up the desktop question modal and remove the nested scroll feel
+
+## Plan
+- [x] Inspect the current desktop question modal implementation and existing prompt modal tests.
+- [x] Refine the ask modal layout so the question UI fits cleanly without an internal scroll region.
+- [x] Run verification, capture a live desktop modal screenshot, and record the result.
+
+## Review
+- Updated `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/PromptModal.tsx` to remove the internal `overflow-y-auto` body and tighten the ask modal around the actual content instead of forcing a nested scroll area inside the dialog.
+- Cleaned up the layout using the existing shadcn surface: the header is denser, the suggested replies are now full-width option rows instead of bulky pill chips, the custom-answer area is more compact, and the footer action reads more cleanly. The dialog itself is slightly wider so long option text wraps naturally instead of feeling cramped.
+- Verification:
+  - `~/.bun/bin/bun test apps/desktop/test/prompt-modal-ask.test.ts` -> pass (`5 pass, 0 fail`)
+  - `~/.bun/bin/bun test --cwd apps/desktop` -> pass (`137 pass, 0 fail`)
+  - `~/.bun/bin/bun test` -> pass (`1698 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+- Live validation:
+  - Relaunched the Electron desktop app with `COWORK_ELECTRON_REMOTE_DEBUG=1 COWORK_DESKTOP_RENDERER_PORT=1421 ~/.bun/bin/bun run desktop:dev`, attached over the repo’s `desktop:browser` CDP wrapper, injected a representative ask prompt into the live renderer, and confirmed the modal no longer uses the nested scroll region shown in the bug screenshot.
+  - Saved the live screenshot at `/Users/mweinbach/Projects/agent-coworker/output/playwright/prompt-modal-clean-no-scroll.png`.
+
+---
+
 # Task: Make desktop local source citations open cleanly instead of showing [blocked]
 
 ## Plan

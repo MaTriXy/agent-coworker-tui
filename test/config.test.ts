@@ -802,6 +802,22 @@ describe("directory resolution", () => {
     expect(cfg.skillsDirs[3]).toBe(path.join(repoRoot(), "skills"));
   });
 
+  test("skillsDirs omit built-in skills when COWORK_DISABLE_BUILTIN_SKILLS is enabled", async () => {
+    const { cwd, home } = await makeTmpDirs();
+
+    const cfg = await loadConfig({
+      cwd,
+      homedir: home,
+      builtInDir: repoRoot(),
+      env: { COWORK_DISABLE_BUILTIN_SKILLS: "1" },
+    });
+
+    expect(cfg.skillsDirs).toHaveLength(3);
+    expect(cfg.skillsDirs[0]).toBe(path.join(cwd, ".agent", "skills"));
+    expect(cfg.skillsDirs[1]).toBe(path.join(home, ".cowork", "skills"));
+    expect(cfg.skillsDirs[2]).toBe(path.join(home, ".agent", "skills"));
+  });
+
   test("memoryDirs populated correctly", async () => {
     const { cwd, home } = await makeTmpDirs();
 

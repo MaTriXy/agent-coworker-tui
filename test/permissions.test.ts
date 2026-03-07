@@ -363,6 +363,12 @@ describe("isReadPathAllowed", () => {
     expect(isReadPathAllowed("/var/uploads/file.png", cfg)).toBe(true);
   });
 
+  test("reads inside configured global skills directory are allowed", () => {
+    const cfg = makeConfig(PROJECT);
+    cfg.skillsDirs = [path.join(PROJECT, ".cowork", "skills")];
+    expect(isReadPathAllowed(path.join(PROJECT, ".cowork", "skills", "pdf", "assets", "pdf.png"), cfg)).toBe(true);
+  });
+
   test("denies reads outside allowed roots", () => {
     const cfg = makeConfig(PROJECT);
     expect(isReadPathAllowed("/etc/passwd", cfg)).toBe(false);
@@ -388,5 +394,15 @@ describe("assertReadPathAllowed", () => {
     await fs.symlink(outside, link);
 
     await expect(assertReadPathAllowed(path.join(link, "pwned.txt"), cfg, "read")).rejects.toThrow(/blocked/i);
+  });
+
+  test("allows a path inside configured skillsDirs", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "perm-read-skills-"));
+    const cfg = makeConfig(dir);
+    const skillsDir = path.join(dir, ".cowork", "skills");
+    cfg.skillsDirs = [skillsDir];
+    const target = path.join(skillsDir, "slides", "references", "example.md");
+
+    await expect(assertReadPathAllowed(target, cfg, "read")).resolves.toBe(path.resolve(target));
   });
 });

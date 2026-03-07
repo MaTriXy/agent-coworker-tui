@@ -43,6 +43,7 @@ function serverOpts(tmpDir: string, overrides?: Partial<StartAgentServerOptions>
     env: {
       AGENT_WORKING_DIR: tmpDir,
       AGENT_PROVIDER: "google",
+      COWORK_SKIP_DEFAULT_SKILLS_BOOTSTRAP: "1",
     },
     ...overrides,
   };
@@ -254,10 +255,27 @@ describe("Server Startup", () => {
   test("loads config with the correct provider from env", async () => {
     const tmpDir = await makeTmpProject();
     const { server, config } = await startAgentServer(
-      serverOpts(tmpDir, { env: { AGENT_WORKING_DIR: tmpDir, AGENT_PROVIDER: "anthropic" } })
+      serverOpts(tmpDir, {
+        env: {
+          AGENT_WORKING_DIR: tmpDir,
+          AGENT_PROVIDER: "anthropic",
+          COWORK_SKIP_DEFAULT_SKILLS_BOOTSTRAP: "1",
+        },
+      })
     );
     try {
       expect(config.provider).toBe("anthropic");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("shared startup omits built-in skills from active runtime config", async () => {
+    const tmpDir = await makeTmpProject();
+    const { server, config } = await startAgentServer(serverOpts(tmpDir));
+    try {
+      expect(config.skillsDirs).toHaveLength(3);
+      expect(config.skillsDirs[1]).toBe(path.join(tmpDir, ".cowork", "skills"));
     } finally {
       server.stop();
     }
@@ -1763,6 +1781,7 @@ describe("Server Resilience", () => {
       env: {
         AGENT_WORKING_DIR: tmpDir,
         AGENT_PROVIDER: "google",
+        COWORK_SKIP_DEFAULT_SKILLS_BOOTSTRAP: "1",
       },
       runTurnImpl: runTurnImpl as any,
     });

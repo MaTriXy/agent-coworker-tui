@@ -92,6 +92,11 @@ describe("desktop server manager startup mode", () => {
       await fs.rm(repoRoot, { recursive: true, force: true });
     }
   });
+
+  test("buildServerEnv mirrors process env without desktop-only skill bootstrap flags", () => {
+    const env = __internal.buildServerEnv();
+    expect(env).not.toBe(process.env);
+  });
 });
 
 describe("desktop server manager bun crash detection", () => {

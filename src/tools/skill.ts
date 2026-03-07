@@ -36,12 +36,18 @@ async function readIfExists(p: string): Promise<string | null> {
 
 export function createSkillTool(ctx: ToolContext) {
   const skills = ctx.availableSkills ?? [];
+  const searchOrder = [
+    "project",
+    "global (~/.cowork/skills)",
+    "user (~/.agent/skills)",
+    ...(ctx.config.skillsDirs.length >= 4 ? ["built-in"] : []),
+  ].join(", ");
 
   // Build description dynamically from discovered skills so models see actual skill names.
   let description =
     "Load a skill (a SKILL.md file) to get specialized instructions for producing a specific type of deliverable.\n\n" +
     "IMPORTANT: Always call this tool BEFORE creating any deliverable. Do NOT skip this step.\n" +
-    "Skills are searched in project, global (~/.cowork/skills), user (~/.agent/skills), then built-in directories.";
+    `Skills are searched in ${searchOrder} directories.`;
 
   let paramDesc: string;
   if (skills.length > 0) {

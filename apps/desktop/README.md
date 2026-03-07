@@ -65,7 +65,7 @@ The wrapper prefers a globally installed `agent-browser` binary and falls back t
 bun run build
 ```
 
-The build pipeline rebuilds bundled desktop resources (`cowork-server` sidecar + prompts/config/skills/docs) via the root `build:desktop-resources` script.
+The build pipeline rebuilds bundled desktop resources (`cowork-server` sidecar + prompts/config/docs) via the root `build:desktop-resources` script. Curated default skills are bootstrapped by the shared agent runtime into `~/.cowork/skills` from GitHub instead of being bundled into the app.
 
 For macOS notarization, set `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`.
 Without those variables, packaging continues but notarization is skipped.

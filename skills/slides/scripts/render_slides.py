@@ -35,13 +35,22 @@ def calc_dpi_via_ooxml(input_path: str, max_w_px: int, max_h_px: int) -> int:
 
 
 def calc_dpi_via_pdf(input_path: str, max_w_px: int, max_h_px: int) -> int:
-    """Convert input to PDF and compute DPI from its page size."""
+    """Compute DPI from PDF page size.
+
+    For non-PDF inputs, first convert to PDF via LibreOffice to read page size.
+    For PDFs, use the PDF directly (avoids unnecessary conversion and failures).
+    """
+    is_pdf = input_path.lower().endswith(".pdf")
     with tempfile.TemporaryDirectory(prefix="soffice_profile_") as user_profile:
         with tempfile.TemporaryDirectory(prefix="soffice_convert_") as convert_tmp_dir:
             stem = splitext(basename(input_path))[0]
-            pdf_path = convert_to_pdf(input_path, user_profile, convert_tmp_dir, stem)
+            pdf_path = (
+                input_path
+                if is_pdf
+                else convert_to_pdf(input_path, user_profile, convert_tmp_dir, stem)
+            )
             if not (pdf_path and exists(pdf_path)):
-                raise RuntimeError("Failed to convert input to PDF for DPI computation.")
+                raise RuntimeError("Failed to produce/read PDF for DPI computation.")
 
             info = pdfinfo_from_path(pdf_path)
             size_val = info.get("Page size")
@@ -53,11 +62,32 @@ def calc_dpi_via_pdf(input_path: str, max_w_px: int, max_h_px: int) -> int:
             if not isinstance(size_val, str):
                 raise RuntimeError("Failed to read PDF page size for DPI computation.")
 
-            m = re.search(r"(\d+)\s*x\s*(\d+)\s*pts", size_val)
-            if not m:
-                raise RuntimeError("Unrecognized PDF page size format.")
-            width_pts = int(m.group(1))
-            height_pts = int(m.group(2))
+            def _parse_page_size_to_pts(s: str) -> tuple[float, float]:
+                # Common formats from poppler/pdfinfo:
+                # - "612 x 792 pts (letter)"
+                # - "595.276 x 841.89 pts (A4)"
+                # - sometimes inches: "8.5 x 11 in"
+                m_pts = re.search(
+                    r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*pts\b",
+                    s,
+                )
+                if m_pts:
+                    return float(m_pts.group(1)), float(m_pts.group(2))
+                m_in = re.search(
+                    r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*in\b",
+                    s,
+                )
+                if m_in:
+                    w_in = float(m_in.group(1))
+                    h_in = float(m_in.group(2))
+                    return w_in * 72.0, h_in * 72.0
+                # Sometimes poppler returns without an explicit unit; treat as points.
+                m = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\b", s)
+                if m:
+                    return float(m.group(1)), float(m.group(2))
+                raise RuntimeError(f"Unrecognized PDF page size format: {s!r}")
+
+            width_pts, height_pts = _parse_page_size_to_pts(size_val)
             width_in = width_pts / 72.0
             height_in = height_pts / 72.0
             if width_in <= 0 or height_in <= 0:
@@ -141,24 +171,24 @@ def convert_to_pdf(
 
 
 def rasterize(
-    pptx_path: str,
+    input_path: str,
     out_dir: str,
     dpi: int,
 ) -> Sequence[str]:
-    """Rasterise PPTX to PNG files placed in out_dir and return the image paths."""
+    """Rasterise PPTX/PDF to PNG files placed in out_dir and return the image paths."""
     makedirs(out_dir, exist_ok=True)
-    pptx_path = abspath(pptx_path)
-    stem = splitext(basename(pptx_path))[0]
+    input_path = abspath(input_path)
+    stem = splitext(basename(input_path))[0]
 
     # Use a unique user profile to avoid LibreOffice profile lock when running concurrently
     with tempfile.TemporaryDirectory(prefix="soffice_profile_") as user_profile:
         # Write conversion outputs into a temp directory to avoid any IO oddities
         with tempfile.TemporaryDirectory(prefix="soffice_convert_") as convert_tmp_dir:
-            pdf_path = convert_to_pdf(
-                pptx_path,
-                user_profile,
-                convert_tmp_dir,
-                stem,
+            is_pdf = input_path.lower().endswith(".pdf")
+            pdf_path = (
+                input_path
+                if is_pdf
+                else convert_to_pdf(input_path, user_profile, convert_tmp_dir, stem)
             )
 
             if not pdf_path or not exists(pdf_path):
@@ -194,11 +224,11 @@ def rasterize(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Render PowerPoint file to PNG images.")
+    parser = argparse.ArgumentParser(description="Render slides to images.")
     parser.add_argument(
         "input_path",
         type=str,
-        help="Path to the input PowerPoint file.",
+        help="Path to the input PowerPoint or PDF file.",
     )
     parser.add_argument(
         "--output_dir",

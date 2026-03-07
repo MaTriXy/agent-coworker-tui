@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 # Copyright (c) OpenAI. All rights reserved.
 import argparse
+import sys
 import tempfile
 from os.path import abspath, expanduser, join
+from pathlib import Path
 from typing import Sequence, cast
 
 import numpy as np
 
-# Always run this script in the current directory.
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
 import render_slides  # type: ignore
 from PIL import Image
 from pptx import Presentation

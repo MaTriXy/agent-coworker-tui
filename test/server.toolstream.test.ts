@@ -127,7 +127,11 @@ describe("Tool loop stream events arrive over WebSocket", () => {
       hostname: "127.0.0.1",
       port: 0,
       homedir: tmpDir,
-      env: { AGENT_WORKING_DIR: tmpDir, AGENT_PROVIDER: "google" },
+      env: {
+        AGENT_WORKING_DIR: tmpDir,
+        AGENT_PROVIDER: "google",
+        COWORK_SKIP_DEFAULT_SKILLS_BOOTSTRAP: "1",
+      },
       runTurnImpl: runTurnImpl as any,
     });
 
@@ -219,7 +223,11 @@ describe("Error part delivered over WebSocket", () => {
       hostname: "127.0.0.1",
       port: 0,
       homedir: tmpDir,
-      env: { AGENT_WORKING_DIR: tmpDir, AGENT_PROVIDER: "google" },
+      env: {
+        AGENT_WORKING_DIR: tmpDir,
+        AGENT_PROVIDER: "google",
+        COWORK_SKIP_DEFAULT_SKILLS_BOOTSTRAP: "1",
+      },
       runTurnImpl: runTurnImpl as any,
     });
 
@@ -270,7 +278,11 @@ describe("Usage event after tool loop", () => {
       hostname: "127.0.0.1",
       port: 0,
       homedir: tmpDir,
-      env: { AGENT_WORKING_DIR: tmpDir, AGENT_PROVIDER: "google" },
+      env: {
+        AGENT_WORKING_DIR: tmpDir,
+        AGENT_PROVIDER: "google",
+        COWORK_SKIP_DEFAULT_SKILLS_BOOTSTRAP: "1",
+      },
       runTurnImpl: runTurnImpl as any,
     });
 

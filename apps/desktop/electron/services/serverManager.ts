@@ -434,6 +434,7 @@ export class ServerManager {
 }
 
 export const __internal = {
+  buildServerEnv,
   buildSourceEnvForAttempt,
   isLikelyBunSegfault,
   resolveSourceStartup,

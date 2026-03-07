@@ -8,6 +8,7 @@ import { loadConfig } from "../src/config";
 import { runTurnWithDeps } from "../src/agent";
 import { DEFAULT_PROVIDER_OPTIONS } from "../src/providers";
 import { loadSubAgentPrompt, loadSystemPromptWithSkills } from "../src/prompt";
+import { ensureDefaultGlobalSkillsReady } from "../src/skills/defaultGlobalSkills";
 import type { AgentConfig, ModelMessage, ProviderName, TodoItem } from "../src/types";
 import type { ToolContext } from "../src/tools";
 import { createAskTool } from "../src/tools/ask";
@@ -1007,6 +1008,7 @@ async function main() {
     env: {
       ...process.env,
       AGENT_WORKING_DIR: repoDir,
+      COWORK_DISABLE_BUILTIN_SKILLS: process.env.COWORK_DISABLE_BUILTIN_SKILLS ?? "1",
     },
   });
 
@@ -1380,7 +1382,15 @@ Final response must be JSON with keys run_id, memo, and end="<<END_RUN>>".`,
       AGENT_PROVIDER: run.provider,
       AGENT_MODEL: resolved.resolvedModel,
       AGENT_HARNESS_REPORT_ONLY: cliArgs.reportOnly ? "true" : "false",
+      COWORK_DISABLE_BUILTIN_SKILLS: process.env.COWORK_DISABLE_BUILTIN_SKILLS ?? "1",
     };
+
+    await ensureDefaultGlobalSkillsReady({
+      env,
+      log: (line) => {
+        console.warn(`[default-skills] ${line}`);
+      },
+    });
 
     const config = await loadConfig({ cwd: repoDir, env });
     config.providerOptions = mergeProviderOptions(DEFAULT_PROVIDER_OPTIONS as Record<string, any>, run.providerOptionsOverride);
@@ -1393,15 +1403,17 @@ Final response must be JSON with keys run_id, memo, and end="<<END_RUN>>".`,
     // Keep memory local to the run folder so artifacts can be captured per-run.
     const localProjectAgentDir = path.join(runDir, ".agent");
     const localUserAgentDir = path.join(runDir, ".agent-user");
+    const hasProjectSkillsDir = Boolean(config.skillsDirs[0]);
     const coworkSkillsDir = config.skillsDirs[1] || "";
-    const builtInSkillsDir = path.join(config.builtInDir, "skills");
+    const hasUserSkillsDir = Boolean(config.skillsDirs[2]);
+    const trailingSkillDirs = config.skillsDirs.slice(3);
     config.projectAgentDir = localProjectAgentDir;
     config.userAgentDir = localUserAgentDir;
     config.skillsDirs = [
-      path.join(localProjectAgentDir, "skills"),
+      hasProjectSkillsDir ? path.join(localProjectAgentDir, "skills") : "",
       coworkSkillsDir,
-      path.join(localUserAgentDir, "skills"),
-      builtInSkillsDir,
+      hasUserSkillsDir ? path.join(localUserAgentDir, "skills") : "",
+      ...trailingSkillDirs,
     ].filter(Boolean);
     config.memoryDirs = [path.join(localProjectAgentDir, "memory"), path.join(localUserAgentDir, "memory")];
     config.configDirs = [localProjectAgentDir, localUserAgentDir, config.builtInConfigDir];

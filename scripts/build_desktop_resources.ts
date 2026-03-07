@@ -120,9 +120,11 @@ async function main() {
   const sidecarCode = await sidecarProc.exited;
   if (sidecarCode !== 0) process.exit(sidecarCode);
 
-  // The server expects built-in prompts/config/skills to live at builtInDir/{prompts,config,skills},
-  // where builtInDir is the parent of dist/server/*.js (i.e. dist/).
-  for (const dir of ["prompts", "config", "skills"] as const) {
+  // The desktop sidecar still needs built-in prompts/config under dist/{prompts,config}.
+  // Curated skills are bootstrapped into ~/.cowork/skills on first desktop startup instead
+  // of being bundled into the app resources.
+  await rmrf(path.join(distDir, "skills"));
+  for (const dir of ["prompts", "config"] as const) {
     const src = path.join(root, dir);
     const dest = path.join(distDir, dir);
     await rmrf(dest);

@@ -1,7 +1,9 @@
 // Copyright (c) OpenAI. All rights reserved.
 "use strict";
 
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
+
+const text = require("./text");
 const image = require("./image");
 const svg = require("./svg");
 const latex = require("./latex");
@@ -12,6 +14,8 @@ const util = require("./util");
 
 module.exports = {
   VERSION,
+  // text layout
+  ...text,
   // images
   ...image,
   // svg helpers
@@ -24,6 +28,6 @@ module.exports = {
   ...layout,
   // slide layout builders
   ...layoutBuilders,
-  // general utilities
+  // text layout helpers and utilities
   ...util,
 };

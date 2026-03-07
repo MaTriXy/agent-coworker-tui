@@ -2,11 +2,17 @@
 # Copyright (c) OpenAI. All rights reserved.
 import argparse
 import re
+import sys
 import tempfile
 from math import ceil
 from os import listdir
 from os.path import basename, expanduser, isfile, join, splitext
+from pathlib import Path
 from typing import Literal
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
 
 from ensure_raster_image import SUPPORTED_EXTS, ensure_raster_image  # type: ignore
 from PIL import Image, ImageDraw, ImageFont, ImageOps

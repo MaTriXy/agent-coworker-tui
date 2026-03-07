@@ -5,27 +5,37 @@ import type { AgentConfig } from "../types";
 import { isPathInside } from "./paths";
 
 const errorWithCodeSchema = z.object({ code: z.string() }).passthrough();
+const WRITE_ROOT_LABEL = "workingDirectory/outputDirectory/uploadsDirectory/project root";
+const READ_ROOT_LABEL = "workingDirectory/outputDirectory/uploadsDirectory/project root/skills directories";
 
-function isPathAllowed(filePath: string, config: AgentConfig): boolean {
-  const resolved = path.resolve(filePath);
-
-  // v0.1: allow writes within the current project, working directory, or output directory.
+function writeRoots(config: AgentConfig): string[] {
   const projectRoot = path.dirname(config.projectAgentDir);
-  if (isPathInside(projectRoot, resolved)) return true;
+  return [
+    projectRoot,
+    config.workingDirectory,
+    ...(config.outputDirectory ? [config.outputDirectory] : []),
+    ...(config.uploadsDirectory ? [config.uploadsDirectory] : []),
+  ];
+}
 
-  if (isPathInside(config.workingDirectory, resolved)) return true;
-  if (config.outputDirectory && isPathInside(config.outputDirectory, resolved)) return true;
-  if (config.uploadsDirectory && isPathInside(config.uploadsDirectory, resolved)) return true;
+function readRoots(config: AgentConfig): string[] {
+  return [
+    ...writeRoots(config),
+    ...config.skillsDirs.filter(Boolean),
+  ];
+}
 
-  return false;
+function isPathInsideAnyRoot(filePath: string, roots: string[]): boolean {
+  const resolved = path.resolve(filePath);
+  return roots.some((root) => isPathInside(root, resolved));
 }
 
 export function isWritePathAllowed(filePath: string, config: AgentConfig): boolean {
-  return isPathAllowed(filePath, config);
+  return isPathInsideAnyRoot(filePath, writeRoots(config));
 }
 
 export function isReadPathAllowed(filePath: string, config: AgentConfig): boolean {
-  return isPathAllowed(filePath, config);
+  return isPathInsideAnyRoot(filePath, readRoots(config));
 }
 
 async function canonicalizeExistingPrefix(targetPath: string): Promise<string> {
@@ -67,34 +77,22 @@ export async function assertWritePathAllowed(
   action: "write" | "edit" | "notebookEdit"
 ): Promise<string> {
   const resolved = path.resolve(filePath);
-  if (!isPathAllowed(resolved, config)) {
+  const roots = writeRoots(config);
+  if (!isPathInsideAnyRoot(resolved, roots)) {
     throw new Error(
-      `${action} blocked: path is outside workingDirectory/outputDirectory/project root: ${resolved}`
+      `${action} blocked: path is outside ${WRITE_ROOT_LABEL}: ${resolved}`
     );
   }
 
   // Guard against symlink escapes such as:
   // <workingDirectory>/link -> /etc and target <workingDirectory>/link/passwd
-  const projectRoot = path.dirname(config.projectAgentDir);
-  const canonicalPromises: Promise<string>[] = [
+  const canonicalRoots = await Promise.all([
     canonicalizeExistingPrefix(resolved),
-    canonicalizeRoot(projectRoot),
-    canonicalizeRoot(config.workingDirectory),
-  ];
-  if (config.outputDirectory) canonicalPromises.push(canonicalizeRoot(config.outputDirectory));
-  if (config.uploadsDirectory) canonicalPromises.push(canonicalizeRoot(config.uploadsDirectory));
+    ...roots.map((root) => canonicalizeRoot(root)),
+  ]);
+  const [canonicalTarget, ...allowedRoots] = canonicalRoots;
 
-  const [canonicalTarget, canonicalProjectRoot, canonicalWorkingDirectory, ...rest] =
-    await Promise.all(canonicalPromises);
-  const canonicalOutputDirectory = config.outputDirectory ? rest.shift() : undefined;
-  const canonicalUploadsDirectory = config.uploadsDirectory ? rest.shift() : undefined;
-
-  if (
-    !isPathInside(canonicalProjectRoot, canonicalTarget) &&
-    !isPathInside(canonicalWorkingDirectory, canonicalTarget) &&
-    !(canonicalOutputDirectory && isPathInside(canonicalOutputDirectory, canonicalTarget)) &&
-    !(canonicalUploadsDirectory && isPathInside(canonicalUploadsDirectory, canonicalTarget))
-  ) {
+  if (!allowedRoots.some((root) => isPathInside(root, canonicalTarget))) {
     throw new Error(
       `${action} blocked: canonical target resolves outside allowed directories: ${canonicalTarget}`
     );
@@ -109,32 +107,20 @@ export async function assertReadPathAllowed(
   action: "read" | "glob" | "grep"
 ): Promise<string> {
   const resolved = path.resolve(filePath);
-  if (!isPathAllowed(resolved, config)) {
+  const roots = readRoots(config);
+  if (!isPathInsideAnyRoot(resolved, roots)) {
     throw new Error(
-      `${action} blocked: path is outside workingDirectory/outputDirectory/project root: ${resolved}`
+      `${action} blocked: path is outside ${READ_ROOT_LABEL}: ${resolved}`
     );
   }
 
-  const projectRoot = path.dirname(config.projectAgentDir);
-  const canonicalPromises: Promise<string>[] = [
+  const canonicalRoots = await Promise.all([
     canonicalizeExistingPrefix(resolved),
-    canonicalizeRoot(projectRoot),
-    canonicalizeRoot(config.workingDirectory),
-  ];
-  if (config.outputDirectory) canonicalPromises.push(canonicalizeRoot(config.outputDirectory));
-  if (config.uploadsDirectory) canonicalPromises.push(canonicalizeRoot(config.uploadsDirectory));
+    ...roots.map((root) => canonicalizeRoot(root)),
+  ]);
+  const [canonicalTarget, ...allowedRoots] = canonicalRoots;
 
-  const [canonicalTarget, canonicalProjectRoot, canonicalWorkingDirectory, ...rest] =
-    await Promise.all(canonicalPromises);
-  const canonicalOutputDirectory = config.outputDirectory ? rest.shift() : undefined;
-  const canonicalUploadsDirectory = config.uploadsDirectory ? rest.shift() : undefined;
-
-  if (
-    !isPathInside(canonicalProjectRoot, canonicalTarget) &&
-    !isPathInside(canonicalWorkingDirectory, canonicalTarget) &&
-    !(canonicalOutputDirectory && isPathInside(canonicalOutputDirectory, canonicalTarget)) &&
-    !(canonicalUploadsDirectory && isPathInside(canonicalUploadsDirectory, canonicalTarget))
-  ) {
+  if (!allowedRoots.some((root) => isPathInside(root, canonicalTarget))) {
     throw new Error(
       `${action} blocked: canonical target resolves outside allowed directories: ${canonicalTarget}`
     );

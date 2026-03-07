@@ -1,15 +1,13 @@
 // Copyright (c) OpenAI. All rights reserved.
 "use strict";
 
-const { calcTextBoxHeight } = require("./util");
+const { calcTextBox, autoFontSize } = require("./text");
 const { imageSizingCrop, imageSizingContain } = require("./image");
 const { getSlideDimensions } = require("./layout");
 
 module.exports = {
   addImageTextCard,
   addCardRow,
-  addIconTitleTextGroup,
-  addIconTitleTextGroupsRow,
   addThreeLevelTree,
 };
 
@@ -55,22 +53,71 @@ function addImageTextCard(slide, opts = {}) {
 
   const textY = y + boxH + gap;
   const fontSize = toNumberOr(textBox.fontSize, 14);
-  const lines = toNumberOr(textBox.lines, 5);
-  const hText = toNumberOr(textBox.h, calcTextBoxHeight(fontSize, lines));
-  slide.addText(text, {
-    x,
-    y: textY,
-    w,
-    h: hText,
-    fontFace: textBox.fontFace,
-    fontSize,
-    color: textBox.color,
-    align: textBox.align,
-    valign: textBox.valign || "top",
-    paraSpaceAfter: textBox.paraSpaceAfter,
-    margin: textBox.margin,
-    fill: opts.background,
-  });
+  const fontFaceRaw = textBox.fontFace;
+  const fontFace =
+    typeof fontFaceRaw === "string" && fontFaceRaw.trim().length > 0
+      ? fontFaceRaw.trim()
+      : null;
+  if (!fontFace) {
+    throw new Error(
+      "addImageTextCard(): textBox.fontFace is required for text measurement."
+    );
+  }
+  let hText;
+  let textOptions;
+
+  if (textBox.h != null && Number.isFinite(toNumberOr(textBox.h, NaN))) {
+    // Layout-first: caller fixed the box height, so adjust font size to fit via autoFontSize.
+    const fixedH = toNumberOr(textBox.h, 0);
+    const baseOpts = {
+      x,
+      y: textY,
+      w,
+      h: fixedH,
+      mode: textBox.mode || "auto",
+      fontSize,
+      minFontSize: textBox.minFontSize,
+      maxFontSize: textBox.maxFontSize,
+      margin: textBox.margin,
+      paraSpaceAfter: textBox.paraSpaceAfter,
+    };
+    const autoOpts = autoFontSize(text, fontFace, baseOpts);
+    hText = fixedH;
+    textOptions = {
+      ...autoOpts,
+      fontFace,
+      color: textBox.color,
+      align: textBox.align,
+      valign: textBox.valign || "top",
+      fill: opts.background,
+    };
+  } else {
+    // Content-first: fixed font size, let calcTextBox derive the required height.
+    const layout = calcTextBox(fontSize, {
+      text,
+      w,
+      fontFace,
+      margin: textBox.margin,
+      paraSpaceAfter: textBox.paraSpaceAfter,
+    });
+    hText = layout.h;
+    textOptions = {
+      x,
+      y: textY,
+      w,
+      h: hText,
+      fontFace,
+      fontSize,
+      color: textBox.color,
+      align: textBox.align,
+      valign: textBox.valign || "top",
+      paraSpaceAfter: textBox.paraSpaceAfter,
+      margin: textBox.margin,
+      fill: opts.background,
+    };
+  }
+
+  slide.addText(text, textOptions);
 
   return {
     x,
@@ -124,89 +171,6 @@ function addCardRow(slide, region, cards = [], options = {}) {
   return placements;
 }
 
-function addIconTitleTextGroup(slide, opts = {}) {
-  const x = toNumberOr(opts.x, 0);
-  const y = toNumberOr(opts.y, 0);
-  const labelW = toNumberOr(opts.widths?.labelW, 0.8);
-  const bodyW = toNumberOr(opts.widths?.bodyW, 2.6);
-  const gapIconTitle = toNumberOr(opts.gaps?.iconTitle, 0.15);
-  const gapLabelBody = toNumberOr(opts.gaps?.labelBody, 0.25);
-  const iconW = toNumberOr(opts.icon?.w, 0.4);
-  const iconH = toNumberOr(opts.icon?.h, 0.4);
-  const fontFace = opts.fonts?.fontFace;
-  const titleSize = toNumberOr(opts.fonts?.titleSize, 14);
-  const bodySize = toNumberOr(opts.fonts?.bodySize, 12);
-
-  const iconX = x + (labelW - iconW) / 2;
-  slide.addImage({
-    ...(opts.icon?.data ? { data: opts.icon.data } : { path: opts.icon?.path }),
-    x: iconX,
-    y,
-    w: iconW,
-    h: iconH,
-  });
-  const titleH = calcTextBoxHeight(titleSize);
-  slide.addText(opts.title || "", {
-    x,
-    y: y + iconH + gapIconTitle,
-    w: labelW,
-    h: titleH,
-    fontFace,
-    fontSize: titleSize,
-    align: "center",
-    valign: "top",
-  });
-
-  const groupTop = y;
-  const bodyY = groupTop;
-  const hBody = toNumberOr(
-    opts.bodyBox?.h,
-    calcTextBoxHeight(bodySize, 16, 1.4)
-  );
-  slide.addText(opts.body || "", {
-    x: x + labelW + gapLabelBody,
-    y: bodyY,
-    w: bodyW,
-    h: hBody,
-    fontFace,
-    fontSize: bodySize,
-    paraSpaceAfter: bodySize * 0.3,
-    valign: "top",
-  });
-
-  return {
-    x,
-    y,
-    label: {
-      x,
-      y,
-      w: labelW,
-      h: Math.max(iconH + gapIconTitle + titleH, hBody),
-    },
-    body: { x: x + labelW + gapLabelBody, y: bodyY, w: bodyW, h: hBody },
-  };
-}
-
-function addIconTitleTextGroupsRow(slide, region, groups = [], options = {}) {
-  const rx = toNumberOr(region.x, 0.4);
-  const ry = toNumberOr(region.y, 1.6);
-  const slideWidth = getSlideDimensions(slide).width;
-  const rw = toNumberOr(region.w, slideWidth - rx * 2);
-  const gap = toNumberOr(options.gap, 0.9);
-  const count = groups.length;
-  if (count === 0) return [];
-  const groupW = toNumberOr(
-    options.groupWidth,
-    (rw - gap * (count - 1)) / count
-  );
-  const placements = [];
-  for (let i = 0; i < count; i++) {
-    const x = rx + i * (groupW + gap);
-    placements.push(addIconTitleTextGroup(slide, { ...groups[i], x, y: ry }));
-  }
-  return placements;
-}
-
 function addThreeLevelTree(slide, opts = {}) {
   const slideWidth = getSlideDimensions(slide).width;
   const cx = toNumberOr(opts.centerX, slideWidth / 2);
@@ -215,22 +179,49 @@ function addThreeLevelTree(slide, opts = {}) {
   const rootW = toNumberOr(opts.root?.w, 3.3333333);
   const rootH = toNumberOr(opts.root?.h, 0.93333333);
   const rootX = cx - rootW / 2;
-
-  slide.addText(opts.root?.text || "", {
+  const rootFontFaceRaw = opts.root?.fontFace;
+  const rootFontFace =
+    typeof rootFontFaceRaw === "string" && rootFontFaceRaw.trim().length > 0
+      ? rootFontFaceRaw.trim()
+      : null;
+  if (!rootFontFace) {
+    throw new Error(
+      "addThreeLevelTree(): opts.root.fontFace is required for text measurement."
+    );
+  }
+  const rootFontSize = toNumberOr(opts.root?.fontSize, 16);
+  const rootText = opts.root?.text || "";
+  const rootTextOpts = autoFontSize(rootText, rootFontFace, {
     x: rootX,
     y: topY,
     w: rootW,
     h: rootH,
+    mode: opts.root?.mode || "shrink",
+    fontSize: rootFontSize,
+    minFontSize: opts.root?.minFontSize,
+    maxFontSize: opts.root?.maxFontSize,
+  });
+  slide.addText(rootText, {
+    ...rootTextOpts,
     align: "center",
     valign: "mid",
-    fontFace: opts.root?.fontFace,
-    fontSize: toNumberOr(opts.root?.fontSize, 16),
+    fontFace: rootFontFace,
     color: opts.root?.color || "FFFFFF",
     fill: { color: opts.root?.fill || "0B0F1A" },
     line: { color: opts.root?.line || opts.root?.fill || "0B0F1A" },
   });
 
   const midLabels = Array.isArray(opts.mid?.labels) ? opts.mid.labels : [];
+  const midFontFaceRaw = opts.mid?.fontFace;
+  const midFontFace =
+    typeof midFontFaceRaw === "string" && midFontFaceRaw.trim().length > 0
+      ? midFontFaceRaw.trim()
+      : null;
+  if (!midFontFace) {
+    throw new Error(
+      "addThreeLevelTree(): opts.mid.fontFace is required for text measurement."
+    );
+  }
   let midW = toNumberOr(opts.mid?.w, NaN);
   const midH = toNumberOr(opts.mid?.h, rootH);
   const midY = toNumberOr(opts.mid?.y, topY + rootH + 1.2);
@@ -261,15 +252,23 @@ function addThreeLevelTree(slide, opts = {}) {
   const startLeft = cx - totalWidth / 2;
   for (let i = 0; i < midLabels.length; i++) {
     const x = startLeft + i * (midW + gap);
-    slide.addText(midLabels[i], {
+    const midText = midLabels[i] || "";
+    const midFontSize = toNumberOr(opts.mid?.fontSize, 16);
+    const midTextOpts = autoFontSize(midText, midFontFace, {
       x,
       y: midY,
       w: midW,
       h: midH,
+      mode: opts.mid?.mode || "shrink",
+      fontSize: midFontSize,
+      minFontSize: opts.mid?.minFontSize,
+      maxFontSize: opts.mid?.maxFontSize,
+    });
+    slide.addText(midText, {
+      ...midTextOpts,
       align: "center",
       valign: "mid",
-      fontFace: opts.mid?.fontFace,
-      fontSize: toNumberOr(opts.mid?.fontSize, 16),
+      fontFace: midFontFace,
       color: opts.mid?.color || "000000",
       fill: { color: opts.mid?.fill || "A0BEC2" },
       line: { color: opts.mid?.line || opts.mid?.fill || "A0BEC2" },
@@ -280,6 +279,16 @@ function addThreeLevelTree(slide, opts = {}) {
   const leavesPerMid = Array.isArray(opts.leaf?.labelsPerMid)
     ? opts.leaf.labelsPerMid
     : [];
+  const leafFontFaceRaw = opts.leaf?.fontFace;
+  const leafFontFace =
+    typeof leafFontFaceRaw === "string" && leafFontFaceRaw.trim().length > 0
+      ? leafFontFaceRaw.trim()
+      : null;
+  if (!leafFontFace) {
+    throw new Error(
+      "addThreeLevelTree(): opts.leaf.fontFace is required for text measurement."
+    );
+  }
   const leafW = toNumberOr(opts.leaf?.w, 1.05);
   const leafH = toNumberOr(opts.leaf?.h, 1.0666667);
   const leafY = toNumberOr(opts.leaf?.y, midY + midH + 1.0);
@@ -297,15 +306,23 @@ function addThreeLevelTree(slide, opts = {}) {
     const leftX = xBase + (midW - totalWidth) / 2;
     for (let j = 0; j < childCount; j++) {
       const x = leftX + j * (leafW + leafGap);
-      slide.addText(childLabels[j] || "", {
+      const leafText = childLabels[j] || "";
+      const leafFontSize = toNumberOr(opts.leaf?.fontSize, 16);
+      const leafTextOpts = autoFontSize(leafText, leafFontFace, {
         x,
         y: leafY,
         w: leafW,
         h: leafH,
+        mode: opts.leaf?.mode || "shrink",
+        fontSize: leafFontSize,
+        minFontSize: opts.leaf?.minFontSize,
+        maxFontSize: opts.leaf?.maxFontSize,
+      });
+      slide.addText(leafText, {
+        ...leafTextOpts,
         align: "center",
         valign: "mid",
-        fontFace: opts.leaf?.fontFace,
-        fontSize: toNumberOr(opts.leaf?.fontSize, 16),
+        fontFace: leafFontFace,
         color: opts.leaf?.color || "000000",
         fill: { color: opts.leaf?.fill || "A6C1EE" },
         line: { color: opts.leaf?.line || opts.leaf?.fill || "A6C1EE" },

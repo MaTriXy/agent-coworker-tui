@@ -346,6 +346,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Agent
   const providerOptions = isPlainObject((merged as Record<string, unknown>).providerOptions)
     ? (deepMerge({}, (merged as Record<string, unknown>).providerOptions as Record<string, unknown>) as Record<string, any>)
     : undefined;
+  const disableBuiltInSkills = asBoolean(env.COWORK_DISABLE_BUILTIN_SKILLS) ?? false;
 
   const mergedModelSettings = parseLayer(modelSettingsLayerSchema, (merged as Record<string, unknown>).modelSettings, {});
   const maxRetries = normalizeNonNegativeInt(env.AGENT_MODEL_MAX_RETRIES) ?? mergedModelSettings.maxRetries;
@@ -370,10 +371,9 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Agent
 
     skillsDirs: [
       path.join(projectAgentDir, "skills"),
-      // Global/shared skills live under ~/.cowork/skills.
-      path.join(coworkPaths.rootDir, "skills"),
+      coworkPaths.skillsDir,
       path.join(userAgentDir, "skills"),
-      path.join(builtInDir, "skills"),
+      ...(disableBuiltInSkills ? [] : [path.join(builtInDir, "skills")]),
     ],
     memoryDirs: [path.join(projectAgentDir, "memory"), path.join(userAgentDir, "memory")],
     configDirs: [projectAgentDir, userAgentDir, builtInConfigDir],

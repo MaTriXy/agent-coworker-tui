@@ -65,7 +65,14 @@ async function resolveSystemTemplatePath(config: AgentConfig): Promise<string> {
   }
 }
 
-function buildSkillPolicySection(skillNames: string, skillExamples: string): string {
+function buildSkillSearchOrder(config: AgentConfig): string {
+  const labels = ["project", "global (~/.cowork/skills)", "user (~/.agent/skills)", "built-in"];
+  return config.skillsDirs
+    .map((_, index) => labels[index] ?? `skills-dir-${index + 1}`)
+    .join(" -> ");
+}
+
+function buildSkillPolicySection(skillNames: string, skillExamples: string, config: AgentConfig): string {
   return [
     "## Skill Loading Policy (Strict)",
     "",
@@ -75,6 +82,7 @@ function buildSkillPolicySection(skillNames: string, skillExamples: string): str
     "- If the task spans multiple deliverable domains, load each required skill before creating files.",
     "- Never claim a skill was loaded unless the `skill` tool call actually occurred in this run.",
     `- Canonical skill names available in this run: ${skillNames}.`,
+    `- Active skill search order for this run: ${buildSkillSearchOrder(config)}.`,
     "",
     "Examples:",
     skillExamples,
@@ -156,7 +164,7 @@ export async function loadSystemPromptWithSkills(config: AgentConfig): Promise<S
     return Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : match;
   });
 
-  prompt += `\n\n${buildSkillPolicySection(vars.skillNames, vars.skillExamples)}`;
+  prompt += `\n\n${buildSkillPolicySection(vars.skillNames, vars.skillExamples, config)}`;
 
   if (skills.length > 0) {
     const list = skills

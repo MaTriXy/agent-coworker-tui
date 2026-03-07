@@ -31,6 +31,7 @@ export type AiCoworkerPaths = {
   configDir: string;
   sessionsDir: string;
   logsDir: string;
+  skillsDir: string;
   connectionsFile: string;
 };
 
@@ -121,8 +122,9 @@ export function getAiCoworkerPaths(opts: { homedir?: string } = {}): AiCoworkerP
   const configDir = path.join(rootDir, "config");
   const sessionsDir = path.join(rootDir, "sessions");
   const logsDir = path.join(rootDir, "logs");
+  const skillsDir = path.join(rootDir, "skills");
   const connectionsFile = path.join(authDir, "connections.json");
-  return { rootDir, authDir, configDir, sessionsDir, logsDir, connectionsFile };
+  return { rootDir, authDir, configDir, sessionsDir, logsDir, skillsDir, connectionsFile };
 }
 
 export async function ensureAiCoworkerHome(paths: AiCoworkerPaths): Promise<void> {
@@ -131,9 +133,10 @@ export async function ensureAiCoworkerHome(paths: AiCoworkerPaths): Promise<void
   await fs.mkdir(paths.configDir, { recursive: true, mode: 0o700 });
   await fs.mkdir(paths.sessionsDir, { recursive: true, mode: 0o700 });
   await fs.mkdir(paths.logsDir, { recursive: true, mode: 0o700 });
+  await fs.mkdir(paths.skillsDir, { recursive: true, mode: 0o700 });
 
   // Best-effort hardening for secret-bearing dirs.
-  for (const dir of [paths.rootDir, paths.authDir, paths.configDir, paths.sessionsDir, paths.logsDir]) {
+  for (const dir of [paths.rootDir, paths.authDir, paths.configDir, paths.sessionsDir, paths.logsDir, paths.skillsDir]) {
     try {
       await fs.chmod(dir, 0o700);
     } catch {
