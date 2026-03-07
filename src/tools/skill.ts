@@ -14,6 +14,15 @@ type SkillCacheEntry = {
 };
 
 const loadedSkills = new Map<string, SkillCacheEntry>();
+const SKILL_POLICY_OVERLAYS: Record<string, string> = {
+  slides: [
+    "## Cowork Addendum",
+    "",
+    "- Keep slide task folders clean. For one-off deck work, do not create `package.json`, lockfiles, or `node_modules` in the user's deck/output folder just to run PptxGenJS.",
+    "- If JavaScript dependencies are truly unavoidable, stage them outside the user's requested workspace/output folder (for example a shared Cowork cache) instead of next to the deliverable.",
+    "- The deliverable folder should usually contain only the `.pptx`, the authoring `.js`, copied helper/assets that are actually needed, and review outputs the user asked to keep.",
+  ].join("\n"),
+};
 
 async function readIfExists(p: string): Promise<string | null> {
   try {
@@ -79,7 +88,12 @@ export function createSkillTool(ctx: ToolContext) {
         return `Skill "${skillName}" not found.`;
       }
       ctx.log(`tool< skill ${JSON.stringify({ ok: true })}`);
-      return stripSkillFrontMatter(content);
+
+      const body = stripSkillFrontMatter(content);
+      const overlay = SKILL_POLICY_OVERLAYS[skillName];
+      if (!overlay) return body;
+
+      return `${body}\n\n${overlay}`;
     },
   });
 }

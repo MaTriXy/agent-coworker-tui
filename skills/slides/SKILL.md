@@ -11,6 +11,8 @@ Use PptxGenJS for slide authoring. Do not use `python-pptx` for deck generation 
 
 Keep work in a task-local directory. Only copy final artifacts to the requested destination after rendering and validation pass.
 
+Do not turn that task-local directory into a disposable Node project. Unless the user explicitly asked for a reusable Node package or the target folder is already an existing package-managed project, do not create `package.json`, lockfiles, or `node_modules` there. If JavaScript dependencies must be staged, keep that staging area outside the user's deliverable folder.
+
 ## Bundled Resources
 
 - `assets/pptxgenjs_helpers/`: Copy this folder into the deck workspace and import it locally instead of reimplementing helper logic.

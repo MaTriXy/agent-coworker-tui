@@ -69,6 +69,13 @@ function expectWorkspaceHygieneAndShellFirstGuidance(prompt: string) {
   expect(prompt).toContain("Only create an ad hoc Python or shell script");
 }
 
+function expectNoWorkspacePackageScaffoldingGuidance(prompt: string) {
+  expect(prompt).toContain(
+    "Do not create `package.json`, `package-lock.json`, `bun.lock`, `yarn.lock`, `pnpm-lock.yaml`, or `node_modules`"
+  );
+  expect(prompt).toContain("stage them outside the user's deliverable folder");
+}
+
 function expectImageInspectionGuidance(prompt: string) {
   const normalized = prompt.toLowerCase();
   const hasReadImageGuidance =
@@ -246,6 +253,7 @@ describe("loadSystemPrompt", () => {
     const prompt = await loadSystemPrompt(config);
 
     expectWorkspaceHygieneAndShellFirstGuidance(prompt);
+    expectNoWorkspacePackageScaffoldingGuidance(prompt);
     expectImageInspectionGuidance(prompt);
   });
 
@@ -257,6 +265,7 @@ describe("loadSystemPrompt", () => {
     const prompt = await loadSystemPrompt(config);
 
     expectWorkspaceHygieneAndShellFirstGuidance(prompt);
+    expectNoWorkspacePackageScaffoldingGuidance(prompt);
     expectImageInspectionGuidance(prompt);
   });
 
@@ -268,6 +277,7 @@ describe("loadSystemPrompt", () => {
     const prompt = await loadSystemPrompt(config);
 
     expectWorkspaceHygieneAndShellFirstGuidance(prompt);
+    expectNoWorkspacePackageScaffoldingGuidance(prompt);
     expectImageInspectionGuidance(prompt);
   });
 

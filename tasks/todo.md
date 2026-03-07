@@ -21,6 +21,26 @@
 - `~/.bun/bin/bunx tsc --noEmit -p apps/desktop/tsconfig.json` -> pass
 - `git diff --check` -> pass
 
+# Task: Keep slide-skill runs from scaffolding local Node projects in user workspaces
+
+## Plan
+- [x] Confirm whether the reported clutter comes from workspace-local `package.json` / `package-lock.json` / `node_modules` creation in the slide workflow.
+- [x] Add runtime prompt and skill-loading guidance that keeps one-off deliverable folders free of disposable package-manager scaffolding.
+- [x] Cover the new guidance with targeted prompt/skill tests and record the chosen scope.
+
+## Review
+- Confirmed in the user-provided test workspace (`/Users/mweinbach/Desktop/Cowork Test`) that the slide workflow had created a local Node project, not just two stray files: `package.json`, `package-lock.json`, and a `node_modules/` tree were present in the deliverable folder.
+- Chose prevention over hiding. The desktop explorer already has a normal hidden-files toggle, but globally treating `package.json` or `node_modules` as hidden would mask legitimate project files in real code workspaces.
+- Updated `/Users/mweinbach/Projects/agent-coworker/src/prompt.ts` so the runtime-appended skill policy now tells all models to avoid creating `package.json`, lockfiles, or `node_modules` in one-off deliverable folders and to stage unavoidable JS dependencies outside the user's deliverable folder.
+- Updated `/Users/mweinbach/Projects/agent-coworker/src/tools/skill.ts` so loading the `slides` skill appends a Cowork-owned addendum even when the active skill source is `~/.cowork/skills/slides/SKILL.md`. That addendum explicitly tells the model not to turn a deck folder into a disposable Node project.
+- Updated `/Users/mweinbach/Projects/agent-coworker/skills/slides/SKILL.md` with the same instruction as a fallback/built-in copy, even though the normal runtime path prefers global skills.
+
+### Verification
+- `~/.bun/bin/bun test test/prompt.test.ts test/tools.test.ts` -> pass (`193 pass, 0 fail`)
+- `~/.bun/bin/bunx tsc --noEmit` -> pass
+- `~/.bun/bin/bun test` -> pass (`1724 pass, 2 skip, 0 fail`)
+- `git diff --check` -> pass
+
 # Task: Repo-wide audit with subagents to find fix-worthy issues
 
 ## Plan

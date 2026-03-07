@@ -2271,6 +2271,29 @@ describe("skill tool", () => {
     expect(res).toBe("First dir");
   });
 
+  test("appends deck-workspace hygiene guidance to slides skill loads", async () => {
+    const dir = await tmpDir();
+    const skillDir = path.join(dir, "skills", "slides");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      skillDoc("slides", "Slides helper skill.", "# Slides Skill\nBuild decks here."),
+      "utf-8"
+    );
+
+    const config = makeConfig(dir);
+    config.skillsDirs = [path.join(dir, "skills")];
+    const ctx = makeCtx(dir);
+    ctx.config = config;
+
+    const t: any = createSkillTool(ctx);
+    const res: string = await t.execute({ skillName: "slides" });
+    expect(res).toContain("Build decks here.");
+    expect(res).toContain("## Cowork Addendum");
+    expect(res).toContain("do not create `package.json`, lockfiles, or `node_modules`");
+    expect(res).toContain("shared Cowork cache");
+  });
+
   test("returns not found when skillsDirs is empty", async () => {
     const dir = await tmpDir();
     const config = makeConfig(dir);
