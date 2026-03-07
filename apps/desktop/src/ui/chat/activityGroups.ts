@@ -1,0 +1,282 @@
+import type { FeedItem, ToolFeedState } from "../../app/types";
+
+import { formatToolCard } from "./toolCards/toolCardFormatting";
+
+export type ActivityFeedItem = Extract<FeedItem, { kind: "reasoning" | "tool" }>;
+export type ToolTraceItem = Extract<FeedItem, { kind: "tool" }> & { sourceIds: string[] };
+
+export type ChatRenderItem =
+  | { kind: "feed-item"; item: FeedItem }
+  | { kind: "activity-group"; id: string; items: ActivityFeedItem[] };
+
+export type ActivityGroupStatus = "approval" | "issue" | "running" | "done";
+
+export type ActivityGroupSummary = {
+  preview: string;
+  reasoningItems: Extract<FeedItem, { kind: "reasoning" }>[];
+  status: ActivityGroupStatus;
+  statusLabel: string;
+  title: string;
+  toolItems: ToolTraceItem[];
+};
+
+function truncate(text: string, max = 180): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
+}
+
+function compactText(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+const genericToolSubtitles = new Set([
+  "Capturing input…",
+  "Running…",
+  "Waiting for approval",
+  "Completed",
+  "Completed successfully",
+  "Completed with warnings",
+  "Denied",
+  "Finished with an issue",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getRecordValue(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (key in record) return record[key];
+  }
+  return undefined;
+}
+
+function isTerminalToolState(state: ToolFeedState): boolean {
+  return state === "output-available" || state === "output-error" || state === "output-denied";
+}
+
+function toolValueSignature(value: unknown): string | null {
+  if (value === undefined) return null;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function toolTraceSubtitle(item: Extract<FeedItem, { kind: "tool" }>): string {
+  return formatToolCard(item.name, item.args, item.result, item.state).subtitle;
+}
+
+function isGenericToolSubtitle(subtitle: string): boolean {
+  if (genericToolSubtitles.has(subtitle)) return true;
+  const segments = subtitle.split(" • ");
+  const tail = segments[segments.length - 1] ?? subtitle;
+  return genericToolSubtitles.has(tail);
+}
+
+function toolTraceInfoScore(item: Extract<FeedItem, { kind: "tool" }>): number {
+  const subtitle = toolTraceSubtitle(item);
+  let score = 0;
+
+  if (item.args !== undefined) score += 1;
+  if (item.result !== undefined) score += 1;
+  if (!isGenericToolSubtitle(subtitle)) score += 2;
+
+  return score;
+}
+
+function toolMergeKey(name: string, args: unknown): string | null {
+  if (!isRecord(args)) return null;
+
+  const base = name.toLowerCase();
+  if (base === "bash") {
+    const command = getRecordValue(args, ["command", "cmd"]);
+    return typeof command === "string" ? `command:${command}` : null;
+  }
+  if (base === "read" || base === "write" || base === "edit") {
+    const filePath = getRecordValue(args, ["filePath", "path"]);
+    return typeof filePath === "string" ? `path:${filePath}` : null;
+  }
+  if (base === "grep") {
+    const path = getRecordValue(args, ["path"]);
+    const pattern = getRecordValue(args, ["pattern"]);
+    const pathPart = typeof path === "string" ? path : "";
+    const patternPart = typeof pattern === "string" ? pattern : "";
+    return pathPart || patternPart ? `${pathPart}::${patternPart}` : null;
+  }
+  if (base === "glob") {
+    const cwd = getRecordValue(args, ["cwd", "path"]);
+    const pattern = getRecordValue(args, ["pattern"]);
+    const cwdPart = typeof cwd === "string" ? cwd : "";
+    const patternPart = typeof pattern === "string" ? pattern : "";
+    return cwdPart || patternPart ? `${cwdPart}::${patternPart}` : null;
+  }
+  if (base === "todowrite") {
+    const count = getRecordValue(args, ["count"]);
+    if (count !== undefined) return `count:${String(count)}`;
+    const todos = getRecordValue(args, ["todos"]);
+    if (Array.isArray(todos)) return `count:${String(todos.length)}`;
+    return null;
+  }
+  if (base === "spawnagent") {
+    const agentType = getRecordValue(args, ["agentType"]);
+    return typeof agentType === "string" ? `agentType:${agentType}` : null;
+  }
+  if (base === "ask") {
+    const question = getRecordValue(args, ["question"]);
+    return typeof question === "string" ? `question:${question}` : null;
+  }
+
+  const common = getRecordValue(args, ["query", "command", "filePath", "path", "url", "pattern", "input"]);
+  return typeof common === "string" ? common : null;
+}
+
+function isCompactToolSummaryResult(result: unknown): boolean {
+  if (!isRecord(result)) return false;
+  return ["count", "chars", "ok", "exitCode", "provider"].some((key) => key in result);
+}
+
+function shouldMergeToolTraceItems(previous: ToolTraceItem, next: Extract<FeedItem, { kind: "tool" }>): boolean {
+  if (previous.name !== next.name) return false;
+  if (!isTerminalToolState(previous.state)) return true;
+
+  const previousArgs = toolValueSignature(previous.args);
+  const nextArgs = toolValueSignature(next.args);
+  const previousResult = toolValueSignature(previous.result);
+  const nextResult = toolValueSignature(next.result);
+  const argsCompatible = previousArgs === null || nextArgs === null || previousArgs === nextArgs;
+  const resultCompatible = previousResult === null || nextResult === null || previousResult === nextResult;
+  const approvalsCompatible =
+    previous.approval === undefined ||
+    next.approval === undefined ||
+    previous.approval.approvalId === next.approval.approvalId;
+
+  if (previousArgs !== null && nextArgs !== null && previousArgs === nextArgs && previousResult !== null && nextResult !== null && previousResult === nextResult) {
+    return true;
+  }
+
+  const previousSubtitle = toolTraceSubtitle(previous);
+  const nextSubtitle = toolTraceSubtitle(next);
+  const previousIsGeneric = isGenericToolSubtitle(previousSubtitle);
+  const nextIsMoreInformative = toolTraceInfoScore(next) > toolTraceInfoScore(previous) && !isGenericToolSubtitle(nextSubtitle);
+  const previousMergeKey = toolMergeKey(previous.name, previous.args);
+  const nextMergeKey = toolMergeKey(next.name, next.args);
+  const mergeKeysCompatible = previousMergeKey === null || nextMergeKey === null || previousMergeKey === nextMergeKey;
+
+  if (previousIsGeneric && nextIsMoreInformative && argsCompatible && approvalsCompatible) {
+    return true;
+  }
+
+  if (
+    mergeKeysCompatible &&
+    typeof previous.result === "string" &&
+    isCompactToolSummaryResult(next.result) &&
+    approvalsCompatible
+  ) {
+    return true;
+  }
+
+  return argsCompatible && resultCompatible && approvalsCompatible;
+}
+
+function mergeToolTraceItems(toolItems: Extract<FeedItem, { kind: "tool" }>[]): ToolTraceItem[] {
+  const traceItems: ToolTraceItem[] = [];
+
+  for (const item of toolItems) {
+    const previous = traceItems[traceItems.length - 1];
+    if (previous && shouldMergeToolTraceItems(previous, item)) {
+      traceItems[traceItems.length - 1] = {
+        ...previous,
+        ts: item.ts,
+        state: item.state,
+        args: item.args ?? previous.args,
+        result: item.result ?? previous.result,
+        approval: item.approval ?? previous.approval,
+        sourceIds: [...previous.sourceIds, item.id],
+      };
+      continue;
+    }
+
+    traceItems.push({ ...item, sourceIds: [item.id] });
+  }
+
+  return traceItems;
+}
+
+function deriveStatus(toolItems: ToolTraceItem[]): ActivityGroupStatus {
+  const states = new Set<ToolFeedState>(toolItems.map((item) => item.state));
+  if (states.has("approval-requested")) return "approval";
+  if (states.has("output-error") || states.has("output-denied")) return "issue";
+  if (states.has("input-streaming") || states.has("input-available")) return "running";
+  return "done";
+}
+
+function statusLabel(status: ActivityGroupStatus, toolCount: number): string {
+  if (status === "approval") return "Needs review";
+  if (status === "issue") return "Issue";
+  if (status === "running") return "Working";
+  if (toolCount > 0) return "Done";
+  return "Summary";
+}
+
+export function buildChatRenderItems(feed: FeedItem[]): ChatRenderItem[] {
+  const items: ChatRenderItem[] = [];
+  let currentGroup: ActivityFeedItem[] = [];
+
+  const flushGroup = () => {
+    if (currentGroup.length === 0) return;
+    items.push({
+      kind: "activity-group",
+      id: `activity-${currentGroup[0].id}`,
+      items: currentGroup,
+    });
+    currentGroup = [];
+  };
+
+  for (const item of feed) {
+    if (item.kind === "todos") {
+      continue;
+    }
+    if (item.kind === "reasoning" || item.kind === "tool") {
+      currentGroup.push(item);
+      continue;
+    }
+    flushGroup();
+    items.push({ kind: "feed-item", item });
+  }
+
+  flushGroup();
+  return items;
+}
+
+export function summarizeActivityGroup(items: ActivityFeedItem[]): ActivityGroupSummary {
+  const reasoningItems = items.filter((item): item is Extract<FeedItem, { kind: "reasoning" }> => item.kind === "reasoning");
+  const rawToolItems = items.filter((item): item is Extract<FeedItem, { kind: "tool" }> => item.kind === "tool");
+  const toolItems = mergeToolTraceItems(rawToolItems);
+  const primaryReasoning =
+    reasoningItems.find((item) => item.mode === "summary") ??
+    reasoningItems[reasoningItems.length - 1];
+  const latestTool = toolItems[toolItems.length - 1];
+  const preview =
+    primaryReasoning?.text
+      ? truncate(compactText(primaryReasoning.text))
+      : latestTool
+        ? formatToolCard(latestTool.name, latestTool.args, latestTool.result, latestTool.state).subtitle
+        : "Reasoning and tool activity";
+  const status = deriveStatus(toolItems);
+
+  return {
+    preview,
+    reasoningItems,
+    status,
+    statusLabel: statusLabel(status, toolItems.length),
+    title: "Thinking",
+    toolItems,
+  };
+}

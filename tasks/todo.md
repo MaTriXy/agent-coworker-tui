@@ -1,3 +1,152 @@
+# Task: Make desktop local source citations open cleanly instead of showing [blocked]
+
+## Plan
+- [x] Inspect the desktop markdown rendering path and confirm where `file://` source links are being rewritten to `[blocked]`.
+- [x] Add a desktop-safe local-file link path before Streamdown hardening so local citations render as usable links.
+- [x] Run verification, including a live Electron check of the source list.
+
+## Review
+- Updated `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/components/ai-elements/message.tsx` so desktop assistant markdown rewrites local `file://` citations into a desktop-only `cowork-file:` link before Streamdown hardening, extends the local sanitize schema to preserve that protocol, and renders those citations through a desktop-aware link component instead of letting `rehype-harden` replace them with `[blocked]`.
+- Kept the fix inside the existing desktop Streamdown/ai-elements surface rather than weakening global URL blocking. External `http`/`https`/`mailto` links still go through a confirmation step before opening in the browser, while local workspace files now use the Electron bridge via `openPath()`.
+- Added `/Users/mweinbach/Projects/agent-coworker/apps/desktop/test/message-links.test.ts` with helper coverage plus a real `MessageResponse` render regression test that would fail if local citations ever regress back to `[blocked]`.
+- Verification:
+  - `~/.bun/bin/bun test apps/desktop/test/message-links.test.ts` -> pass (`5 pass, 0 fail`)
+  - `~/.bun/bin/bun test --cwd apps/desktop` -> pass (`137 pass, 0 fail`)
+  - `~/.bun/bin/bun test` -> pass (`1698 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+- Live validation:
+  - Relaunched the Electron desktop app with `COWORK_ELECTRON_REMOTE_DEBUG=1 COWORK_DESKTOP_RENDERER_PORT=1421 ~/.bun/bin/bun run desktop:dev`, attached over the repo’s `desktop:browser` CDP wrapper, and confirmed the `Sources` list in the existing `Requesting Feedback on Model` thread no longer shows `[blocked]`.
+  - Saved the live screenshot at `/Users/mweinbach/Projects/agent-coworker/output/playwright/source-links-fix-after-sanitize.png`.
+
+---
+
+# Task: Merge grouped desktop tool lifecycle rows and fix trace badge alignment
+
+## Plan
+- [x] Inspect the grouped trace renderer and confirm why tool call/result updates are showing as separate rows.
+- [x] Collapse adjacent tool lifecycle updates into one trace row inside the `Thinking` panel.
+- [x] Fix the grouped trace status pill alignment and run verification with a live desktop check.
+
+## Review
+- Updated `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/chat/activityGroups.ts` so grouped desktop traces now merge adjacent tool items by lifecycle compatibility instead of only by raw name. The merge handles in-progress -> terminal transitions, exact duplicate terminal rows, generic-completed -> richer-completed rows, and the common desktop pattern where one row carries a verbose string result while the next carries a compact `{ count | chars | ok | exitCode }` summary for the same tool call.
+- Tightened `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/chat/ActivityGroupCard.tsx` so the `Done`/status pills use explicit icon sizing and `whitespace-nowrap`, and the grouped `Thinking` header now stacks earlier in the three-column desktop shell instead of forcing the title, count badge, and status pill into the same narrow row.
+- Expanded `/Users/mweinbach/Projects/agent-coworker/apps/desktop/test/chat-activity-groups.test.ts` with regression coverage for duplicate terminal rows, generic-to-richer completed rows, and verbose-string-result -> compact-summary-result pairs.
+- Verification:
+  - `~/.bun/bin/bun test apps/desktop/test/chat-activity-groups.test.ts` -> pass (`8 pass, 0 fail`)
+  - `~/.bun/bin/bun test --cwd apps/desktop` -> pass (`132 pass, 0 fail`)
+  - `~/.bun/bin/bun test` -> pass (`1693 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+- Live validation:
+  - Relaunched the Electron app with `COWORK_ELECTRON_REMOTE_DEBUG=1 ~/.bun/bin/bun run desktop:dev`, attached to the running renderer over CDP, and verified the two visible grouped traces dropped from `18`/`25` rows to `13`/`14` merged lifecycle rows after a full reload.
+  - Captured the updated live desktop state at `/Users/mweinbach/Projects/agent-coworker/output/playwright/tool-trace-merged-centered-3.png`.
+
+---
+
+# Task: Make the expanded desktop tool trace readable inside the Thinking card
+
+## Plan
+- [x] Inspect the current grouped trace UI and identify why the expanded Thinking panel is unreadable.
+- [x] Replace the nested tool-card stack inside the Thinking disclosure with a compact readable step trace.
+- [x] Run verification, including a live Electron screenshot of the expanded trace.
+
+## Review
+- Reworked `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/chat/ActivityGroupCard.tsx` so the expanded `Thinking` disclosure no longer renders a second stack of nested `ToolCard` disclosures. It now shows a compact numbered step list with readable one-line summaries, clear status pills, and optional inline details for rows that have extra metadata.
+- Kept the fix inside the existing shadcn surface by continuing to use local `Card`, `Badge`, and `Collapsible` primitives instead of adding new trace-specific state elsewhere in the store. The grouping logic in `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/chat/activityGroups.ts` and the standalone tool-card surface for non-grouped tool rows remain intact.
+- Updated `/Users/mweinbach/Projects/agent-coworker/tasks/lessons.md` to capture the correction from the user: grouped tool traces should not reuse the full nested tool-card stack inside another disclosure.
+- Verification:
+  - `~/.bun/bin/bun test --cwd apps/desktop` -> pass (`127 pass, 0 fail`)
+  - `~/.bun/bin/bun test` -> pass (`1688 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+- Live validation:
+  - Relaunched the desktop app with `COWORK_ELECTRON_REMOTE_DEBUG=1 ~/.bun/bin/bun run desktop:dev`, attached over CDP, and captured the expanded `Thinking` panel after opening the grouped trace.
+  - The live expanded trace screenshot is `/Users/mweinbach/Projects/agent-coworker/output/playwright/tool-trace-readable-expanded.png`.
+
+---
+
+# Task: Auto reconnect desktop threads and restore saved sessions on startup
+
+## Plan
+- [x] Inspect the desktop restore/reconnect flow and confirm whether the existing socket layer already supports resume/retry.
+- [x] Enable desktop socket auto reconnect and make startup reopen the most relevant saved workspace/thread instead of leaving the app in a disconnected state.
+- [x] Run verification, including desktop-focused tests and a live Electron reconnect smoke check.
+
+## Review
+- In `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/app/store.helpers/controlSocket.ts` and `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/app/store.helpers/threadEventReducer.ts`, desktop control and thread sockets now opt into the existing shared `AgentSocket` auto-reconnect behavior instead of treating every close as terminal.
+- In `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/app/store.actions/bootstrap.ts`, persisted startup restore now prefers the most recently opened workspace, picks the best resumable thread from that workspace, and immediately calls `selectThread()`/`selectWorkspace()` after state load so transcript hydration and reconnect logic run during app startup rather than waiting for a manual click.
+- Added regression coverage in `/Users/mweinbach/Projects/agent-coworker/apps/desktop/test/workspace-settings-sync.test.ts` and `/Users/mweinbach/Projects/agent-coworker/apps/desktop/test/thread-reconnect.test.ts` to pin auto-reconnect socket options, most-recent-workspace restore, and the restored-thread behavior. I also reset the shared desktop runtime maps in those tests so they behave like clean app launches instead of leaking sockets across cases.
+- Verification:
+  - `~/.bun/bin/bun test apps/desktop/test/thread-reconnect.test.ts apps/desktop/test/workspace-settings-sync.test.ts` -> pass (`10 pass, 0 fail`)
+  - `~/.bun/bin/bun test --cwd apps/desktop` -> pass (`127 pass, 0 fail`)
+  - `~/.bun/bin/bun test` -> pass (`1688 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+- Live validation:
+  - Launched the desktop app with `COWORK_ELECTRON_REMOTE_DEBUG=1 ~/.bun/bin/bun run desktop:dev`, attached over CDP with `~/.bun/bin/bun run desktop:browser -- snapshot -i`, and confirmed startup reopened the persisted `Cowork Test` workspace and `Requesting Feedback on Model` thread directly into the chat shell with the normal composer visible.
+  - Captured the live startup state at `/Users/mweinbach/Projects/agent-coworker/output/playwright/desktop-reconnect-restore.png`.
+
+---
+
+# Task: Reduce desktop tool/reasoning UI density in chat
+
+## Plan
+- [x] Inspect the desktop chat feed rendering path and identify where tool and reasoning items dominate the main timeline.
+- [x] Refactor the desktop chat UI to collapse tool and reasoning activity into a lighter secondary surface while keeping detailed inspection available.
+- [x] Run verification, capture a live desktop visual pass, and record the outcome.
+
+## Review
+- Reworked the desktop chat timeline so consecutive reasoning and tool events are grouped into a single collapsible “Thinking” block instead of rendering every tool inline in the main transcript. The grouping logic lives in `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/chat/activityGroups.ts`, and the new grouped surface is rendered by `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/chat/ActivityGroupCard.tsx`.
+- Updated `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/ChatView.tsx` to render those grouped activity blocks in the transcript, while preserving the existing message/error/system rows. This keeps tool/reasoning detail available, but moves it behind one disclosure per activity burst.
+- Tightened the underlying tool rows in `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/components/ai-elements/tool.tsx` and stopped normal successful tools from auto-expanding in `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/chat/toolCards/ToolCard.tsx`, so expanded traces still read as secondary detail instead of another wall of UI.
+- Added regression coverage in `/Users/mweinbach/Projects/agent-coworker/apps/desktop/test/chat-activity-groups.test.ts` for grouping and summary behavior.
+- Verification:
+  - `bun test --cwd apps/desktop` -> pass (`125 pass, 0 fail`)
+  - `bun test` -> pass (`1686 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+- Live validation:
+  - Relaunched the Electron app with `COWORK_ELECTRON_REMOTE_DEBUG=1 bun run desktop:dev`, attached with the repo’s `desktop:browser` CDP wrapper, and confirmed the thread now renders a compact `Thinking` block with the tool count and a one-line preview instead of a long stack of tool cards.
+  - Saved the live screenshot at `/Users/mweinbach/Projects/agent-coworker/output/playwright/tool-density-after-2.png`.
+
+---
+
+# Task: Improve the desktop question prompt modal UI
+
+## Plan
+- [x] Review the current ask modal implementation and local shadcn primitives.
+- [x] Refine the question modal hierarchy and spacing inside `apps/desktop/src/ui/PromptModal.tsx` without changing ask behavior.
+- [x] Run verification, record the results, and note any remaining visual-validation gap.
+
+## Review
+- Updated `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/PromptModal.tsx` so the ask modal has a clearer visual hierarchy: a lighter header with a small status badge, stronger title/question grouping, cleaner suggested-reply chips, and a more intentional custom-answer section.
+- Kept the work inside the existing shadcn dialog/button/input/badge primitives instead of introducing new modal-specific components or state. The only behavior-oriented change is layout hardening for long prompts via a bounded modal height and a scrollable body.
+- Verification:
+  - `bun test --cwd apps/desktop` -> pass (`122 pass, 0 fail`)
+  - `bun test` -> pass (`1683 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+- Live validation:
+  - Relaunched the desktop app with `COWORK_ELECTRON_REMOTE_DEBUG=1 bun run desktop:dev`, reattached over the repo’s `desktop:browser` CDP wrapper, and confirmed the app shell and existing thread still rendered cleanly after the modal refactor.
+  - I was not able to reproduce a fresh ask prompt from that session, so the modal-specific visual confirmation is still based on the component/layout change rather than a new live screenshot of the exact prompt state.
+
+---
+
+# Task: Fix desktop composer overlap between the model selector and send button
+
+## Plan
+- [x] Identify the exact composer/layout path causing the overlap.
+- [x] Adjust the desktop composer layout so the model selector, message field, and send action no longer collide at typical desktop widths.
+- [x] Run focused verification and record any remaining live-validation gap.
+
+## Review
+- Kept the fix inside the desktop shadcn/ai-elements surface instead of adding new state/layout plumbing after the user called out that the first pass was over-engineered.
+- Tightened the actual prompt primitives in `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/components/ai-elements/prompt-input.tsx`: smaller shell padding, smaller textarea minimum height, a bordered footer row, flexible tool area, and a compact shadcn button size for the send/stop action.
+- Updated `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/ChatView.tsx` so the helper copy now lives in the footer action group instead of taking its own row below the composer, and compacted the model selector trigger to behave like a proper footer control instead of crowding the message area.
+- This keeps the fix in the existing ai-elements composition (`PromptInputBody` / `PromptInputFooter` / `PromptInputTools` / `PromptInputSubmit`) and existing shadcn primitives (`SelectTrigger`, `Button`) rather than pushing it into store sizing logic.
+- Verification:
+  - `bun test --cwd apps/desktop` -> pass (`122 pass, 0 fail`)
+  - `bun test` -> pass (`1683 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+- Live verification note: I attempted to relaunch the Electron app for another visual pass, but the headless dev session did not stay attached long enough in this shell to do a reliable Playwright follow-up screenshot. The code path and desktop test suite are clean; a manual visual check in a normal desktop session is still worthwhile.
+
+---
+
 # Task: Run the harness in this repo with Codex gpt-5.4
 
 ## Plan

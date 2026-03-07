@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 type MockSocketOpts = {
   url: string;
   client: string;
+  autoReconnect?: boolean;
+  resumeSessionId?: string;
   onEvent?: (evt: any) => void;
   onClose?: (reason: string) => void;
 };
@@ -76,6 +78,7 @@ mock.module("../src/lib/agentSocket", () => ({
 }));
 
 const { useAppStore } = await import("../src/app/store");
+const { RUNTIME } = await import("../src/app/store.helpers");
 
 function socketByClient(client: string): MockAgentSocket {
   const socket = [...MOCK_SOCKETS].reverse().find((s) => s.opts.client === client);
@@ -107,6 +110,13 @@ describe("thread reconnect", () => {
     MOCK_SOCKETS.length = 0;
     mockedTranscript = [];
     mockedTranscriptError = null;
+    RUNTIME.controlSockets.clear();
+    RUNTIME.threadSockets.clear();
+    RUNTIME.optimisticUserMessageIds.clear();
+    RUNTIME.pendingThreadMessages.clear();
+    RUNTIME.pendingWorkspaceDefaultApplyThreadIds.clear();
+    RUNTIME.workspaceStartPromises.clear();
+    RUNTIME.modelStreamByThread.clear();
 
     useAppStore.setState({
       ready: true,
@@ -151,6 +161,7 @@ describe("thread reconnect", () => {
     await useAppStore.getState().selectThread(threadId);
 
     const threadSocket = socketByClient("desktop");
+    expect(threadSocket.opts.autoReconnect).toBe(true);
     emitServerHello(threadSocket, "thread-session");
 
     const state = useAppStore.getState();

@@ -1,4 +1,4 @@
-import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { AlertTriangleIcon, MessageSquareIcon, RotateCcwIcon } from "lucide-react";
@@ -24,11 +24,6 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../components/ai-elements/prompt-input";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "../components/ai-elements/reasoning";
 import { MessageBarResizer } from "./layout/MessageBarResizer";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
@@ -44,6 +39,8 @@ import {
 import { MODEL_CHOICES, UI_DISABLED_PROVIDERS } from "../lib/modelChoices";
 import type { ProviderName } from "../lib/wsProtocol";
 import { cn } from "../lib/utils";
+import { ActivityGroupCard } from "./chat/ActivityGroupCard";
+import { buildChatRenderItems } from "./chat/activityGroups";
 import { normalizeFeedForToolCards } from "./chat/toolCards/legacyToolLogs";
 import { ToolCard } from "./chat/toolCards/ToolCard";
 
@@ -79,18 +76,6 @@ export function filterFeedForDeveloperMode(feed: FeedItem[], developerMode: bool
   return developerMode ? feed : feed.filter((item) => item.kind !== "system" && item.kind !== "log");
 }
 
-const ReasoningFeedItem = memo(function ReasoningFeedItem(props: { item: Extract<FeedItem, { kind: "reasoning" }> }) {
-  const [expanded, setExpanded] = useState(false);
-  const label = reasoningLabelForMode(props.item.mode);
-
-  return (
-    <Reasoning open={expanded} onOpenChange={setExpanded}>
-      <ReasoningTrigger label={label} />
-      <ReasoningContent>{props.item.text}</ReasoningContent>
-    </Reasoning>
-  );
-});
-
 const FeedRow = memo(function FeedRow(props: { item: FeedItem }) {
   const { developerMode } = useChatViewContext();
   const item = props.item;
@@ -110,7 +95,7 @@ const FeedRow = memo(function FeedRow(props: { item: FeedItem }) {
   }
 
   if (item.kind === "reasoning") {
-    return <ReasoningFeedItem item={item} />;
+    return null;
   }
 
   if (item.kind === "todos") {
@@ -197,7 +182,10 @@ function ThreadModelSelector({
         setThreadModel(threadId, p as ProviderName, mParts.join(":"));
       }}
     >
-      <SelectTrigger size="sm" className="w-auto max-w-[200px] border-none bg-transparent px-2.5 shadow-none focus:ring-0 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground">
+      <SelectTrigger
+        size="sm"
+        className="h-7 w-auto min-w-0 max-w-[220px] border-none bg-transparent px-1.5 text-xs text-muted-foreground shadow-none transition-colors hover:bg-muted/50 hover:text-foreground focus:ring-0"
+      >
         <span className="truncate"><SelectValue placeholder="Model" /></span>
       </SelectTrigger>
       <SelectContent>
@@ -250,6 +238,7 @@ export function ChatView() {
   const feed = rt?.feed ?? [];
   const normalizedFeed = normalizeFeedForToolCards(feed, developerMode);
   const visibleFeed = filterFeedForDeveloperMode(normalizedFeed, developerMode);
+  const renderItems = useMemo(() => buildChatRenderItems(visibleFeed), [visibleFeed]);
   const contextValue = useMemo<ChatViewContextValue>(
     () => ({
       developerMode,
@@ -327,6 +316,7 @@ export function ChatView() {
   const disabled = busy || hasPromptModal;
   const transcriptOnly = rt?.transcriptOnly === true;
   const disconnected = !transcriptOnly && thread.status !== "active";
+  const showModelSelector = visibleFeed.length === 0 && !!rt?.config?.provider && !!rt?.config?.model;
 
   const placeholder = transcriptOnly
     ? "Continue in a new thread..."
@@ -380,12 +370,18 @@ export function ChatView() {
                 description="Send a message to start."
               />
             ) : (
-              visibleFeed.map((item) => <FeedRow key={item.id} item={item} />)
+              renderItems.map((item) =>
+                item.kind === "activity-group" ? (
+                  <ActivityGroupCard key={item.id} items={item.items} />
+                ) : (
+                  <FeedRow key={item.item.id} item={item.item} />
+                )
+              )
             )}
           </ConversationContent>
         </Conversation>
 
-        <div className="relative border-t border-border/60 px-4 py-3 flex flex-col shrink-0" style={{ height: messageBarHeight }}>
+        <div className="relative border-t border-border/60 px-4 py-1.5 flex flex-col shrink-0" style={{ height: messageBarHeight }}>
           <MessageBarResizer />
           <PromptInputRoot>
             <PromptInputForm
@@ -408,26 +404,28 @@ export function ChatView() {
               </PromptInputBody>
               <PromptInputFooter>
                 <PromptInputTools>
-                  {visibleFeed.length === 0 && rt?.config?.provider && rt?.config?.model ? (
+                  {showModelSelector ? (
                     <ThreadModelSelector
                       threadId={selectedThreadId}
-                      provider={rt.config.provider}
-                      model={rt.config.model}
+                      provider={rt!.config.provider}
+                      model={rt!.config.model}
                       disabled={busy}
                     />
                   ) : null}
                 </PromptInputTools>
-                <PromptInputSubmit
-                  status={busy ? "streaming" : "ready"}
-                  disabled={disabled || !composerText.trim()}
-                  onStop={() => cancelThread(selectedThreadId)}
-                />
+                <div className={cn("flex shrink-0 items-center gap-2", busy ? "opacity-100" : "opacity-70")}>
+                  <span className="hidden max-w-[18rem] text-right text-xs leading-tight text-muted-foreground sm:block">
+                    {busy ? "Agent is working..." : "Press Enter to send, Shift+Enter for newline."}
+                  </span>
+                  <PromptInputSubmit
+                    status={busy ? "streaming" : "ready"}
+                    disabled={disabled || !composerText.trim()}
+                    onStop={() => cancelThread(selectedThreadId)}
+                  />
+                </div>
               </PromptInputFooter>
             </PromptInputForm>
           </PromptInputRoot>
-          <div className={cn("mx-auto mt-2 max-w-3xl shrink-0 text-center text-xs text-muted-foreground", busy ? "opacity-100" : "opacity-70")}>
-            {busy ? "Agent is working..." : "Press Enter to send, Shift+Enter for newline."}
-          </div>
         </div>
       </div>
     </ChatViewContext.Provider>

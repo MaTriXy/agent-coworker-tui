@@ -50,7 +50,7 @@ export function Tool({ className, ...props }: ToolProps) {
   return (
     <Collapsible
       className={cn(
-        "w-full max-w-3xl overflow-hidden rounded-xl border border-transparent bg-muted/10 ring-1 ring-border/30 transition-all hover:bg-muted/20",
+        "w-full max-w-3xl overflow-hidden rounded-lg border border-border/60 bg-background/55 shadow-sm transition-colors hover:bg-muted/15",
         className,
       )}
       {...props}
@@ -84,19 +84,19 @@ function ToolIcon({ title, className }: { title: string; className?: string }) {
 export function ToolHeader({ className, title, subtitle, state, ...props }: ToolHeaderProps) {
   return (
     <CollapsibleTrigger
-      className={cn("group flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left outline-none", className)}
+      className={cn("group flex w-full items-center justify-between gap-3 px-2.5 py-2 text-left outline-none", className)}
       {...props}
     >
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-background shadow-sm ring-1 ring-border/40 transition-colors group-hover:bg-muted/50">
+        <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-muted/30 ring-1 ring-border/40 transition-colors group-hover:bg-muted/50">
           <ToolIcon title={title} className="size-3.5 text-muted-foreground/80" />
         </div>
-        <div className="min-w-0 py-0.5">
-          <div className="truncate font-semibold leading-tight text-[13px] text-foreground">{title}</div>
+        <div className="min-w-0">
+          <div className="truncate font-semibold leading-tight text-[12px] text-foreground">{title}</div>
           {subtitle ? <div className="mt-0.5 truncate text-[11px] text-muted-foreground/80">{subtitle}</div> : null}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2">
         <Badge
           variant={state === "output-error" || state === "output-denied" ? "destructive" : state === "output-available" ? "outline" : "secondary"}
           className="gap-1.5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
@@ -113,7 +113,7 @@ export function ToolHeader({ className, title, subtitle, state, ...props }: Tool
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 
 export function ToolContent({ className, ...props }: ToolContentProps) {
-  return <CollapsibleContent className={cn("flex flex-col gap-4 px-3 pb-3 pt-1 select-text", className)} {...props} />;
+  return <CollapsibleContent className={cn("flex flex-col gap-3 px-2.5 pb-2.5 pt-1 select-text", className)} {...props} />;
 }
 
 export type ToolCodeBlockProps = {

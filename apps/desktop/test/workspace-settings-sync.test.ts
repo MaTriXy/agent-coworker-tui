@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 type MockSocketOpts = {
   client: string;
+  autoReconnect?: boolean;
+  resumeSessionId?: string;
   onEvent?: (evt: any) => void;
   onClose?: (reason: string) => void;
 };
@@ -69,6 +71,7 @@ mock.module("../src/lib/agentSocket", () => ({
 }));
 
 const { useAppStore } = await import("../src/app/store");
+const { RUNTIME } = await import("../src/app/store.helpers");
 
 function socketByClient(client: string): MockAgentSocket {
   const socket = [...MOCK_SOCKETS].reverse().find((entry) => entry.opts.client === client);
@@ -101,6 +104,13 @@ describe("workspace settings sync", () => {
     workspaceId = `ws-${crypto.randomUUID()}`;
     MOCK_SOCKETS.length = 0;
     mockedLoadedState = { version: 2, workspaces: [], threads: [] };
+    RUNTIME.controlSockets.clear();
+    RUNTIME.threadSockets.clear();
+    RUNTIME.optimisticUserMessageIds.clear();
+    RUNTIME.pendingThreadMessages.clear();
+    RUNTIME.pendingWorkspaceDefaultApplyThreadIds.clear();
+    RUNTIME.workspaceStartPromises.clear();
+    RUNTIME.modelStreamByThread.clear();
 
     useAppStore.setState({
       ready: true,
@@ -178,6 +188,111 @@ describe("workspace settings sync", () => {
     const loaded = useAppStore.getState().workspaces[0];
     expect(loaded?.defaultModel).toBe("gpt-5.2");
     expect(loaded?.defaultSubAgentModel).toBe("gpt-5.2");
+  });
+
+  test("init reopens the latest workspace thread even when it was persisted disconnected", async () => {
+    mockedLoadedState = {
+      version: 2,
+      workspaces: [
+        {
+          id: "ws-load",
+          name: "Loaded",
+          path: "/tmp/workspace",
+          createdAt: "2026-02-19T00:00:00.000Z",
+          lastOpenedAt: "2026-02-19T00:00:00.000Z",
+          defaultProvider: "openai",
+          defaultModel: "gpt-5.2",
+          defaultEnableMcp: true,
+          yolo: false,
+        },
+      ],
+      threads: [
+        {
+          id: "thread-load",
+          workspaceId: "ws-load",
+          title: "Recovered thread",
+          createdAt: "2026-02-19T00:00:00.000Z",
+          lastMessageAt: "2026-02-19T00:05:00.000Z",
+          status: "disconnected",
+          sessionId: "thread-session-persisted",
+        },
+      ],
+      developerMode: false,
+      showHiddenFiles: false,
+    };
+
+    await useAppStore.getState().init();
+
+    const state = useAppStore.getState();
+    expect(state.selectedWorkspaceId).toBe("ws-load");
+    expect(state.selectedThreadId).toBe("thread-load");
+
+    const controlSocket = socketByClient("desktop-control");
+    const threadSocket = socketByClient("desktop");
+    expect(controlSocket.opts.autoReconnect).toBe(true);
+    expect(threadSocket.opts.autoReconnect).toBe(true);
+    expect(threadSocket.opts.resumeSessionId).toBe("thread-session-persisted");
+  });
+
+  test("init prefers the most recently opened workspace when restoring a thread", async () => {
+    mockedLoadedState = {
+      version: 2,
+      workspaces: [
+        {
+          id: "ws-old",
+          name: "Older",
+          path: "/tmp/workspace-old",
+          createdAt: "2026-02-18T00:00:00.000Z",
+          lastOpenedAt: "2026-02-18T00:00:00.000Z",
+          defaultProvider: "openai",
+          defaultModel: "gpt-5.2",
+          defaultEnableMcp: true,
+          yolo: false,
+        },
+        {
+          id: "ws-new",
+          name: "Newer",
+          path: "/tmp/workspace-new",
+          createdAt: "2026-02-19T00:00:00.000Z",
+          lastOpenedAt: "2026-02-19T00:00:00.000Z",
+          defaultProvider: "openai",
+          defaultModel: "gpt-5.2",
+          defaultEnableMcp: true,
+          yolo: false,
+        },
+      ],
+      threads: [
+        {
+          id: "thread-old",
+          workspaceId: "ws-old",
+          title: "Older thread",
+          createdAt: "2026-02-18T00:00:00.000Z",
+          lastMessageAt: "2026-02-18T00:05:00.000Z",
+          status: "active",
+          sessionId: "thread-session-old",
+        },
+        {
+          id: "thread-new",
+          workspaceId: "ws-new",
+          title: "Newer thread",
+          createdAt: "2026-02-19T00:00:00.000Z",
+          lastMessageAt: "2026-02-19T00:05:00.000Z",
+          status: "disconnected",
+          sessionId: "thread-session-new",
+        },
+      ],
+      developerMode: false,
+      showHiddenFiles: false,
+    };
+
+    await useAppStore.getState().init();
+
+    const state = useAppStore.getState();
+    expect(state.selectedWorkspaceId).toBe("ws-new");
+    expect(state.selectedThreadId).toBe("thread-new");
+
+    const threadSocket = socketByClient("desktop");
+    expect(threadSocket.opts.resumeSessionId).toBe("thread-session-new");
   });
 
   test("control session_config syncs workspace default subagent model", async () => {

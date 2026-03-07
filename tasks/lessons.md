@@ -4,3 +4,7 @@
 - Keep fallback stream IDs lifecycle-stable: do not seed with per-chunk indices, and align id-less `tool_input_*` and `tool_*` call/result IDs to the same fallback call key.
 - For live production-loop validation, avoid over-constraining tool-call order unless the ordering itself is the behavior under test; assert required tool usage, not first-call sequencing.
 - For live desktop UI testing in this repo, default to the Playwright/CDP workflow first; relaunch Electron with `COWORK_ELECTRON_REMOTE_DEBUG=1` instead of relying only on lighter wrappers.
+- For desktop UI bugs in the shadcn/ai-elements surface, fix the component composition and spacing locally before adding new state/layout plumbing.
+- For dense desktop agent timelines, collapse reasoning and tool traces into a shared secondary disclosure before trying to restyle dozens of inline cards.
+- For grouped desktop tool traces, do not nest the full `ToolCard` disclosure stack inside the `Thinking` disclosure; use a flat, readable step list and visually verify the expanded state, not just the collapsed summary.
+- For grouped desktop trace cleanup, merge adjacent tool rows by lifecycle compatibility and result shape, not just by matching tool name, and verify the header layout inside the real three-column shell because viewport breakpoints alone can hide narrow-panel collisions.

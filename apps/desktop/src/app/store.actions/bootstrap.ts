@@ -127,11 +127,17 @@ const persistedStateSchema = z.object({
   developerMode: z.preprocess((value) => (typeof value === "boolean" ? value : false), z.boolean()),
   showHiddenFiles: z.preprocess((value) => (typeof value === "boolean" ? value : false), z.boolean()),
 }).passthrough().transform((state) => {
-  const selectedWorkspaceId = state.workspaces[0]?.id ?? null;
+  const workspaceByRecency = [...state.workspaces].sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt));
+  const selectedWorkspaceId = workspaceByRecency[0]?.id ?? null;
+  const workspaceThreads = selectedWorkspaceId
+    ? state.threads
+        .filter((thread) => thread.workspaceId === selectedWorkspaceId)
+        .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt))
+    : [];
   const selectedThreadId =
-    selectedWorkspaceId
-      ? state.threads.find((thread) => thread.workspaceId === selectedWorkspaceId && thread.status === "active")?.id ?? null
-      : null;
+    workspaceThreads.find((thread) => thread.status === "active")?.id ??
+    workspaceThreads[0]?.id ??
+    null;
   return {
     workspaces: state.workspaces,
     threads: state.threads,
@@ -158,6 +164,12 @@ export function createBootstrapActions(set: StoreSet, get: StoreGet): Pick<AppSt
           ready: true,
           startupError: null,
         });
+
+        if (state.selectedThreadId) {
+          await get().selectThread(state.selectedThreadId);
+        } else if (state.selectedWorkspaceId) {
+          await get().selectWorkspace(state.selectedWorkspaceId);
+        }
         return;
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);

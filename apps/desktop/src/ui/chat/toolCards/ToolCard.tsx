@@ -36,7 +36,6 @@ export const ToolCard = memo(function ToolCard(props: ToolCardProps) {
   const [expanded, setExpanded] = useState(false);
   const shouldAutoExpand =
     props.state === "approval-requested" ||
-    props.state === "output-available" ||
     props.state === "output-error" ||
     props.state === "output-denied";
 

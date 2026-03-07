@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { MessageSquareIcon, SparklesIcon } from "lucide-react";
 
 import { useAppStore } from "../app/store";
 import type { PromptModalState } from "../app/types";
@@ -8,6 +9,7 @@ import {
   normalizeAskQuestion as normalizeAskQuestionShared,
   shouldRenderAskOptions as shouldRenderAskOptionsShared,
 } from "@cowork/shared/askPrompt";
+import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
   Dialog,
@@ -45,51 +47,93 @@ function AskPromptContent(props: {
 
   return (
     <>
-      <DialogHeader>
-        <DialogTitle>Question</DialogTitle>
-        <DialogDescription className="whitespace-pre-wrap text-sm leading-6">{questionText}</DialogDescription>
+      <DialogHeader className="gap-4 bg-gradient-to-br from-primary/10 via-background to-background px-6 py-5">
+        <Badge variant="secondary" className="w-fit border-border/70 bg-background/80 text-foreground shadow-sm">
+          <SparklesIcon className="mr-1 size-3.5" />
+          Need your input
+        </Badge>
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/85 shadow-sm">
+            <MessageSquareIcon className="size-4 text-primary" />
+          </div>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <DialogTitle className="text-xl font-semibold tracking-tight">Question</DialogTitle>
+            <DialogDescription className="whitespace-pre-wrap text-sm leading-6 text-foreground/80">
+              {questionText}
+            </DialogDescription>
+          </div>
+        </div>
       </DialogHeader>
 
-      {hasOptions ? (
-        <div className="flex flex-wrap justify-center gap-2">
-          {opts.map((option) => (
+      <div className="flex max-h-[min(70vh,32rem)] flex-col gap-5 overflow-y-auto px-6 py-5">
+        {hasOptions ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Suggested replies
+              </div>
+              <div className="text-xs text-muted-foreground">Choose one to answer instantly.</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {opts.map((option) => (
+                <Button
+                  key={option}
+                  variant="outline"
+                  className="h-auto justify-start rounded-full border-border/70 bg-background/80 px-3.5 py-2 text-left text-sm shadow-sm hover:bg-muted/65"
+                  type="button"
+                  onClick={() => props.answerAsk(props.modal.threadId, props.modal.prompt.requestId, option)}
+                >
+                  {option}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/20 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {hasOptions ? "Custom answer" : "Your answer"}
+            </div>
+            <div className="text-xs text-muted-foreground">Press Enter to send.</div>
+          </div>
+          <div className="flex gap-2 max-[600px]:flex-col">
+            <Input
+              value={freeText}
+              onChange={(e) => setFreeText(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitFreeText();
+                }
+              }}
+              className="h-11 rounded-xl border-border/70 bg-background shadow-none"
+              placeholder={hasOptions ? "Or type a custom answer..." : "Type your answer..."}
+              aria-label="Custom answer"
+              autoFocus={!hasOptions}
+            />
             <Button
-              key={option}
-              variant="outline"
-              className="rounded-full"
               type="button"
-              onClick={() => props.answerAsk(props.modal.threadId, props.modal.prompt.requestId, option)}
+              className="h-11 rounded-xl px-4"
+              disabled={!freeText.trim()}
+              onClick={submitFreeText}
             >
-              {option}
+              Send
             </Button>
-          ))}
+          </div>
         </div>
-      ) : null}
 
-      <div className="flex gap-2 max-[600px]:flex-col">
-        <Input
-          value={freeText}
-          onChange={(e) => setFreeText(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submitFreeText();
-            }
-          }}
-          placeholder={hasOptions ? "Or type a custom answer..." : "Type your answer..."}
-          aria-label="Custom answer"
-          autoFocus={!hasOptions}
-        />
-        <Button type="button" disabled={!freeText.trim()} onClick={submitFreeText}>
-          Send
-        </Button>
+        <DialogFooter className="border-t border-border/60 pt-4">
+          <Button
+            variant="ghost"
+            className="mr-auto text-muted-foreground hover:text-foreground"
+            type="button"
+            onClick={skip}
+          >
+            Skip for now
+          </Button>
+        </DialogFooter>
       </div>
-
-      <DialogFooter>
-        <Button variant="outline" type="button" onClick={skip}>
-          Skip
-        </Button>
-      </DialogFooter>
     </>
   );
 }
@@ -115,6 +159,7 @@ export function PromptModal() {
     }}>
       {modal ? (
         <DialogContent
+          className={modal.kind === "ask" ? "w-[min(96vw,44rem)] max-h-[85vh] gap-0 overflow-hidden p-0" : undefined}
           onEscapeKeyDown={isAsk ? () => {
             // Let the onOpenChange handler deal with it so a response is sent.
           } : undefined}
