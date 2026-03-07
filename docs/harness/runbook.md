@@ -34,6 +34,7 @@ Explicit scenario selection:
 bun scripts/run_raw_agent_loops.ts --scenario mixed
 bun scripts/run_raw_agent_loops.ts --scenario dcf-model-matrix
 bun scripts/run_raw_agent_loops.ts --scenario gpt-skill-reliability
+bun scripts/run_raw_agent_loops.ts --scenario codex-gpt-5.4-smoke
 ```
 
 ## Output Layout

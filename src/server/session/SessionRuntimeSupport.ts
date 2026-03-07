@@ -1,8 +1,7 @@
-import path from "node:path";
-
 import { loadMCPConfigRegistry, type MCPRegistryServer } from "../../mcp/configRegistry";
 import { emitObservabilityEvent } from "../../observability/otel";
 import type { ServerErrorCode, ServerErrorSource } from "../../types";
+import { resolveCoworkHomedir } from "../../utils/coworkHome";
 import type { ServerEvent } from "../protocol";
 import type { SessionDependencies, SessionRuntimeState } from "./SessionContext";
 
@@ -110,6 +109,6 @@ export class SessionRuntimeSupport {
   }
 
   private getUserHomeDir(): string | undefined {
-    return this.opts.state.config.userAgentDir ? path.dirname(this.opts.state.config.userAgentDir) : undefined;
+    return resolveCoworkHomedir(this.opts.state.config.userAgentDir);
   }
 }

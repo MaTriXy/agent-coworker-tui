@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import { getAiCoworkerPaths } from "../connect";
 import type { AgentConfig } from "../types";
 import {
@@ -7,6 +5,7 @@ import {
   readCodexAuthMaterial,
   refreshCodexAuthMaterialCoalesced,
 } from "./codex-auth";
+import { resolveCoworkHomedir } from "../utils/coworkHome";
 
 type HeaderMap = Record<string, string>;
 type HeaderResolver = () => Promise<HeaderMap>;
@@ -69,8 +68,7 @@ export function createAnthropicModelAdapter(modelId: string, savedKey?: string):
 }
 
 async function resolveCodexAuthHeaders(config: AgentConfig): Promise<HeaderMap> {
-  const homedir = config.userAgentDir ? path.dirname(config.userAgentDir) : undefined;
-  const paths = getAiCoworkerPaths(homedir ? { homedir } : {});
+  const paths = getAiCoworkerPaths({ homedir: resolveCoworkHomedir(config.userAgentDir) });
 
   let material = await readCodexAuthMaterial(paths, { migrateLegacy: true });
   if (!material?.accessToken) return {};

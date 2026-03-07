@@ -26,10 +26,10 @@ export function ReasoningTrigger({ className, label, ...props }: ReasoningTrigge
       {...props}
     >
       <span className="inline-flex items-center gap-2">
-        <BrainIcon className="h-3.5 w-3.5" />
+        <BrainIcon className="size-3.5" />
         {label}
       </span>
-      <ChevronDownIcon className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+      <ChevronDownIcon className="size-4 transition-transform group-data-[state=open]:rotate-180" />
     </CollapsibleTrigger>
   );
 }

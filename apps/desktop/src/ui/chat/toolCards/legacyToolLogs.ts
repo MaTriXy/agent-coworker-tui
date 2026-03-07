@@ -27,12 +27,13 @@ function parsePayload(value: unknown): unknown {
   }
 }
 
-function inferStatusFromPayload(payload: unknown): "done" | "error" {
+function inferStateFromPayload(payload: unknown): Extract<FeedItem, { kind: "tool" }>["state"] {
   const parsedPayload = payloadErrorStatusSchema.safeParse(payload);
   if (parsedPayload.success) {
-    if ("error" in parsedPayload.data || "denied" in parsedPayload.data) return "error";
+    if ("error" in parsedPayload.data) return "output-error";
+    if ("denied" in parsedPayload.data) return "output-denied";
   }
-  return "done";
+  return "output-available";
 }
 
 export function parseLegacyToolLogLine(line: string): LegacyToolLog | null {
@@ -74,7 +75,7 @@ export function normalizeFeedForToolCards(feed: FeedItem[], developerMode: boole
         kind: "tool",
         ts: item.ts,
         name: parsed.name,
-        status: "running",
+        state: "input-available",
         args: parsed.payload,
       });
       const pending = pendingByName.get(parsed.name) ?? [];
@@ -90,7 +91,7 @@ export function normalizeFeedForToolCards(feed: FeedItem[], developerMode: boole
       if (existing && existing.kind === "tool") {
         out[idx] = {
           ...existing,
-          status: inferStatusFromPayload(parsed.payload),
+          state: inferStateFromPayload(parsed.payload),
           result: parsed.payload,
         };
       }
@@ -103,7 +104,7 @@ export function normalizeFeedForToolCards(feed: FeedItem[], developerMode: boole
       kind: "tool",
       ts: item.ts,
       name: parsed.name,
-      status: inferStatusFromPayload(parsed.payload),
+      state: inferStateFromPayload(parsed.payload),
       result: parsed.payload,
     });
   }

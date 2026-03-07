@@ -1,19 +1,23 @@
-import type { FormEventHandler, HTMLAttributes, KeyboardEventHandler, ReactNode, RefObject } from "react";
+import type { ComponentProps } from "react";
 
+import { forwardRef } from "react";
 import { CornerDownLeftIcon, SquareIcon } from "lucide-react";
 
-import { designTokens } from "../../lib/designTokens";
-import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
+import { designTokens } from "../../lib/designTokens";
+import { cn } from "../../lib/utils";
 
-type PromptInputRootProps = HTMLAttributes<HTMLDivElement>;
+export type PromptInputStatus = "ready" | "submitted" | "streaming" | "error";
+
+type PromptInputRootProps = ComponentProps<"div">;
 
 export function PromptInputRoot({ className, ...props }: PromptInputRootProps) {
   return (
     <div
+      data-slot="prompt-input"
       className={cn(
-        "mx-auto w-full max-w-3xl rounded-2xl p-3 shadow-[0_10px_25px_rgba(0,0,0,0.06)] flex flex-col min-h-0 flex-1",
+        "mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col rounded-2xl p-3 shadow-[0_10px_25px_rgba(0,0,0,0.06)] focus-within:ring-2 focus-within:ring-primary/30",
         designTokens.classes.panelSurface,
         className,
       )}
@@ -22,69 +26,84 @@ export function PromptInputRoot({ className, ...props }: PromptInputRootProps) {
   );
 }
 
-type PromptInputFormProps = {
-  className?: string;
-  onSubmit: FormEventHandler<HTMLFormElement>;
-  children: ReactNode;
-};
+export const PromptInputForm = forwardRef<HTMLFormElement, ComponentProps<"form">>(function PromptInputForm(
+  { className, ...props },
+  ref,
+) {
+  return <form ref={ref} className={cn("flex min-h-0 flex-1 flex-col gap-3", className)} {...props} />;
+});
 
-export function PromptInputForm({ className, onSubmit, children }: PromptInputFormProps) {
-  return (
-    <form className={cn("flex flex-1 items-end gap-3 min-h-0", className)} onSubmit={onSubmit}>
-      {children}
-    </form>
-  );
-}
+export const PromptInputBody = forwardRef<HTMLDivElement, ComponentProps<"div">>(function PromptInputBody(
+  { className, ...props },
+  ref,
+) {
+  return <div ref={ref} className={cn("flex min-h-0 flex-1", className)} {...props} />;
+});
 
-type PromptInputTextareaProps = {
-  value: string;
-  placeholder?: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-  onKeyDown?: KeyboardEventHandler<HTMLTextAreaElement>;
-  textareaRef?: RefObject<HTMLTextAreaElement | null>;
-};
+export const PromptInputFooter = forwardRef<HTMLDivElement, ComponentProps<"div">>(function PromptInputFooter(
+  { className, ...props },
+  ref,
+) {
+  return <div ref={ref} className={cn("flex items-center justify-between gap-3", className)} {...props} />;
+});
 
-export function PromptInputTextarea({
-  value,
-  placeholder,
-  disabled,
-  onChange,
-  onKeyDown,
-  textareaRef,
-}: PromptInputTextareaProps) {
+export const PromptInputTools = forwardRef<HTMLDivElement, ComponentProps<"div">>(function PromptInputTools(
+  { className, ...props },
+  ref,
+) {
+  return <div ref={ref} className={cn("flex min-w-0 items-center gap-2", className)} {...props} />;
+});
+
+export const PromptInputTextarea = forwardRef<HTMLTextAreaElement, ComponentProps<typeof Textarea>>(function PromptInputTextarea(
+  { className, rows = 1, ...props },
+  ref,
+) {
   return (
     <Textarea
-      ref={textareaRef}
-      className="h-full w-full min-h-0 flex-1 resize-none border-none bg-transparent p-2 shadow-none focus-visible:ring-0"
-      value={value}
-      placeholder={placeholder}
-      disabled={disabled}
-      onChange={(event) => onChange(event.currentTarget.value)}
-      onKeyDown={onKeyDown}
-      aria-label="Message input"
+      ref={ref}
+      rows={rows}
+      className={cn(
+        "min-h-[3.5rem] flex-1 resize-none border-none bg-transparent p-2 shadow-none focus-visible:ring-0",
+        className,
+      )}
+      {...props}
     />
   );
-}
+});
 
-type PromptInputSubmitProps = {
-  busy: boolean;
-  disabled?: boolean;
-  onStop: () => void;
+type PromptInputSubmitProps = Omit<ComponentProps<typeof Button>, "children" | "type"> & {
+  onStop?: () => void;
+  status: PromptInputStatus;
 };
 
-export function PromptInputSubmit({ busy, disabled, onStop }: PromptInputSubmitProps) {
-  if (busy) {
+export function PromptInputSubmit({ className, disabled, onStop, status, ...props }: PromptInputSubmitProps) {
+  if (status === "submitted" || status === "streaming") {
     return (
-      <Button type="button" size="icon" variant="destructive" className="rounded-full" onClick={onStop} aria-label="Stop generating response">
-        <SquareIcon className="h-4 w-4" />
+      <Button
+        type="button"
+        size="icon"
+        variant="destructive"
+        className={cn("rounded-full", className)}
+        disabled={disabled || !onStop}
+        onClick={onStop}
+        aria-label="Stop generating response"
+        {...props}
+      >
+        <SquareIcon data-icon="stop" />
       </Button>
     );
   }
 
   return (
-    <Button type="submit" size="icon" className="rounded-full" disabled={disabled} aria-label="Send message">
-      <CornerDownLeftIcon className="h-4 w-4" />
+    <Button
+      type="submit"
+      size="icon"
+      className={cn("rounded-full", className)}
+      disabled={disabled}
+      aria-label="Send message"
+      {...props}
+    >
+      <CornerDownLeftIcon data-icon="send" />
     </Button>
   );
 }

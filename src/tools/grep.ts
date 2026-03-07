@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { execFile } from "node:child_process";
-import path from "node:path";
 
 import type { ToolContext } from "./context";
 import { defineTool } from "./defineTool";
+import { resolveCoworkHomedir } from "../utils/coworkHome";
 import { resolveMaybeRelative, truncateText } from "../utils/paths";
 import { ensureRipgrep } from "../utils/ripgrep";
 import { assertReadPathAllowed } from "../utils/permissions";
@@ -48,7 +48,7 @@ export function createGrepTool(
 
       let rgPath: string;
       try {
-        const homedir = path.dirname(ctx.config.userAgentDir);
+        const homedir = resolveCoworkHomedir(ctx.config.userAgentDir);
         rgPath = await ensureRipgrepImpl({ homedir, log: ctx.log });
       } catch (err) {
         const msg = `ripgrep (rg) not available: ${String(err)}`;

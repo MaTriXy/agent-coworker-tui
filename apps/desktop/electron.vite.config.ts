@@ -54,6 +54,7 @@ export default defineConfig({
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
+        "@": path.resolve(appRoot, "src"),
         "@cowork": path.resolve(repoRoot, "src"),
       },
     },

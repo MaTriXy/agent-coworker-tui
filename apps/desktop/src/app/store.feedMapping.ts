@@ -12,6 +12,7 @@ export type ThreadModelStreamRuntime = {
   reasoningTextByStream: Map<string, string>;
   reasoningTurns: Set<string>;
   toolItemIdByKey: Map<string, string>;
+  latestToolKeyByTurnAndName: Map<string, string>;
   toolInputByKey: Map<string, string>;
   lastAssistantTurnId: string | null;
   lastReasoningTurnId: string | null;
@@ -33,6 +34,7 @@ export function createThreadModelStreamRuntime(): ThreadModelStreamRuntime {
     reasoningTextByStream: new Map(),
     reasoningTurns: new Set(),
     toolItemIdByKey: new Map(),
+    latestToolKeyByTurnAndName: new Map(),
     toolInputByKey: new Map(),
     lastAssistantTurnId: null,
     lastReasoningTurnId: null,
@@ -46,6 +48,7 @@ export function clearThreadModelStreamRuntime(runtime: ThreadModelStreamRuntime)
   runtime.reasoningTextByStream.clear();
   runtime.reasoningTurns.clear();
   runtime.toolItemIdByKey.clear();
+  runtime.latestToolKeyByTurnAndName.clear();
   runtime.toolInputByKey.clear();
   runtime.lastAssistantTurnId = null;
   runtime.lastReasoningTurnId = null;
@@ -86,6 +89,72 @@ function normalizeToolArgsFromInput(inputText: string, existingArgs?: unknown): 
   return { input: inputText };
 }
 
+function toolTurnNameKey(turnId: string, name: string): string {
+  return `${turnId}:${name}`;
+}
+
+function toolSyntheticApprovalKey(turnId: string, approvalId: string): string {
+  return `${turnId}:approval:${approvalId}`;
+}
+
+function toolNameFromApproval(toolCall: unknown): string {
+  if (isRecord(toolCall)) {
+    const toolName = toolCall.toolName;
+    if (typeof toolName === "string" && toolName.trim().length > 0) return toolName;
+    const name = toolCall.name;
+    if (typeof name === "string" && name.trim().length > 0) return name;
+  }
+  return "tool";
+}
+
+function toolArgsFromApproval(toolCall: unknown): unknown {
+  if (!isRecord(toolCall)) return undefined;
+  if ("args" in toolCall) return toolCall.args;
+  if ("input" in toolCall) return toolCall.input;
+  return undefined;
+}
+
+function rememberLatestToolKey(stream: ThreadModelStreamRuntime, turnId: string, name: string, fullKey: string) {
+  stream.latestToolKeyByTurnAndName.set(toolTurnNameKey(turnId, name), fullKey);
+}
+
+function resolveToolItem(
+  stream: ThreadModelStreamRuntime,
+  turnId: string,
+  key: string,
+  name: string
+): { fullKey: string; itemId?: string } {
+  const fullKey = `${turnId}:${key}`;
+  const directItemId = stream.toolItemIdByKey.get(fullKey);
+  if (directItemId) {
+    rememberLatestToolKey(stream, turnId, name, fullKey);
+    return { fullKey, itemId: directItemId };
+  }
+
+  const latestKey = stream.latestToolKeyByTurnAndName.get(toolTurnNameKey(turnId, name));
+  if (!latestKey) {
+    return { fullKey };
+  }
+
+  const latestItemId = stream.toolItemIdByKey.get(latestKey);
+  if (!latestItemId) {
+    return { fullKey };
+  }
+
+  if (latestKey !== fullKey) {
+    stream.toolItemIdByKey.delete(latestKey);
+    const latestInput = stream.toolInputByKey.get(latestKey);
+    if (latestInput !== undefined) {
+      stream.toolInputByKey.delete(latestKey);
+      stream.toolInputByKey.set(fullKey, latestInput);
+    }
+  }
+
+  stream.toolItemIdByKey.set(fullKey, latestItemId);
+  rememberLatestToolKey(stream, turnId, name, fullKey);
+  return { fullKey, itemId: latestItemId };
+}
+
 export function shouldSuppressRawDebugLogLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
@@ -116,13 +185,6 @@ function modelStreamSystemLine(update: ModelStreamUpdate): string | null {
 
   if (update.kind === "reasoning_end") {
     return `Reasoning ended (${update.mode})`;
-  }
-
-  if (update.kind === "tool_approval_request") {
-    const toolName = isRecord(update.toolCall) && typeof update.toolCall.toolName === "string"
-      ? update.toolCall.toolName
-      : "tool";
-    return `Tool approval requested: ${toolName}`;
   }
 
   if (update.kind === "source") {
@@ -207,50 +269,55 @@ function applyModelStreamUpdate(
   }
 
   if (update.kind === "tool_input_start") {
-    const key = `${update.turnId}:${update.key}`;
-    const itemId = stream.toolItemIdByKey.get(key);
+    const { fullKey, itemId } = resolveToolItem(stream, update.turnId, update.key, update.name);
     if (itemId) {
       ops.updateFeedItem(itemId, (item) =>
-        item.kind === "tool" ? { ...item, name: update.name, status: "running", args: update.args ?? item.args } : item
+        item.kind === "tool"
+          ? { ...item, name: update.name, state: "input-streaming", args: update.args ?? item.args }
+          : item
       );
       return;
     }
 
     const id = ops.makeId();
-    stream.toolItemIdByKey.set(key, id);
-    push({ id, kind: "tool", ts: ops.nowIso(), name: update.name, status: "running", args: update.args });
+    stream.toolItemIdByKey.set(fullKey, id);
+    rememberLatestToolKey(stream, update.turnId, update.name, fullKey);
+    push({ id, kind: "tool", ts: ops.nowIso(), name: update.name, state: "input-streaming", args: update.args });
     return;
   }
 
   if (update.kind === "tool_input_delta") {
-    const key = `${update.turnId}:${update.key}`;
-    const nextInput = `${stream.toolInputByKey.get(key) ?? ""}${update.delta}`;
-    stream.toolInputByKey.set(key, nextInput);
-    const itemId = stream.toolItemIdByKey.get(key);
+    const fullKey = `${update.turnId}:${update.key}`;
+    const nextInput = `${stream.toolInputByKey.get(fullKey) ?? ""}${update.delta}`;
+    stream.toolInputByKey.set(fullKey, nextInput);
+    const itemId = stream.toolItemIdByKey.get(fullKey);
     if (!itemId) {
       const id = ops.makeId();
-      stream.toolItemIdByKey.set(key, id);
+      stream.toolItemIdByKey.set(fullKey, id);
       push({
         id,
         kind: "tool",
         ts: ops.nowIso(),
         name: "tool",
-        status: "running",
+        state: "input-streaming",
         args: normalizeToolArgsFromInput(nextInput),
       });
       return;
     }
     ops.updateFeedItem(itemId, (item) => {
       if (item.kind !== "tool") return item;
-      return { ...item, args: normalizeToolArgsFromInput(nextInput, item.args) };
+      return {
+        ...item,
+        state: item.state === "approval-requested" ? item.state : "input-streaming",
+        args: normalizeToolArgsFromInput(nextInput, item.args),
+      };
     });
     return;
   }
 
   if (update.kind === "tool_input_end") {
-    const key = `${update.turnId}:${update.key}`;
-    const itemId = stream.toolItemIdByKey.get(key);
-    const nextInput = stream.toolInputByKey.get(key) ?? "";
+    const { fullKey, itemId } = resolveToolItem(stream, update.turnId, update.key, update.name);
+    const nextInput = stream.toolInputByKey.get(fullKey) ?? "";
 
     if (itemId) {
       ops.updateFeedItem(itemId, (item) =>
@@ -258,6 +325,7 @@ function applyModelStreamUpdate(
           ? {
               ...item,
               name: update.name,
+              state: item.state === "approval-requested" ? item.state : "input-available",
               args: nextInput ? normalizeToolArgsFromInput(nextInput, item.args) : item.args,
             }
           : item
@@ -267,59 +335,107 @@ function applyModelStreamUpdate(
 
     if (!nextInput) return;
     const id = ops.makeId();
-    stream.toolItemIdByKey.set(key, id);
+    stream.toolItemIdByKey.set(fullKey, id);
+    rememberLatestToolKey(stream, update.turnId, update.name, fullKey);
     push({
       id,
       kind: "tool",
       ts: ops.nowIso(),
       name: update.name,
-      status: "running",
+      state: "input-available",
       args: normalizeToolArgsFromInput(nextInput),
     });
     return;
   }
 
   if (update.kind === "tool_call") {
-    const key = `${update.turnId}:${update.key}`;
-    const itemId = stream.toolItemIdByKey.get(key);
+    const { fullKey, itemId } = resolveToolItem(stream, update.turnId, update.key, update.name);
     if (itemId) {
       ops.updateFeedItem(itemId, (item) =>
         item.kind === "tool"
-          ? { ...item, name: update.name, status: "running", args: update.args ?? item.args }
+          ? {
+              ...item,
+              name: update.name,
+              state: item.state === "approval-requested" ? item.state : "input-available",
+              args: update.args ?? item.args,
+            }
           : item
       );
       return;
     }
 
     const id = ops.makeId();
-    stream.toolItemIdByKey.set(key, id);
-    push({ id, kind: "tool", ts: ops.nowIso(), name: update.name, status: "running", args: update.args });
+    stream.toolItemIdByKey.set(fullKey, id);
+    rememberLatestToolKey(stream, update.turnId, update.name, fullKey);
+    push({ id, kind: "tool", ts: ops.nowIso(), name: update.name, state: "input-available", args: update.args });
     return;
   }
 
   if (update.kind === "tool_result" || update.kind === "tool_error" || update.kind === "tool_output_denied") {
-    const key = `${update.turnId}:${update.key}`;
-    const itemId = stream.toolItemIdByKey.get(key);
+    const { fullKey, itemId } = resolveToolItem(stream, update.turnId, update.key, update.name);
     const result =
       update.kind === "tool_result"
         ? update.result
         : update.kind === "tool_error"
           ? { error: update.error }
           : { denied: true, reason: update.reason };
+    const state =
+      update.kind === "tool_result"
+        ? "output-available"
+        : update.kind === "tool_error"
+          ? "output-error"
+          : "output-denied";
 
     if (itemId) {
       ops.updateFeedItem(itemId, (item) =>
         item.kind === "tool"
-          ? { ...item, name: update.name, status: "done", result }
+          ? { ...item, name: update.name, state, result }
           : item
       );
     } else {
       const id = ops.makeId();
-      stream.toolItemIdByKey.set(key, id);
-      push({ id, kind: "tool", ts: ops.nowIso(), name: update.name, status: "done", result });
+      stream.toolItemIdByKey.set(fullKey, id);
+      rememberLatestToolKey(stream, update.turnId, update.name, fullKey);
+      push({ id, kind: "tool", ts: ops.nowIso(), name: update.name, state, result });
     }
 
     ops.onToolTerminal?.();
+    return;
+  }
+
+  if (update.kind === "tool_approval_request") {
+    const name = toolNameFromApproval(update.toolCall);
+    const latestKey = stream.latestToolKeyByTurnAndName.get(toolTurnNameKey(update.turnId, name));
+    const itemId = latestKey ? stream.toolItemIdByKey.get(latestKey) : undefined;
+
+    if (itemId) {
+      ops.updateFeedItem(itemId, (item) =>
+        item.kind === "tool"
+          ? {
+              ...item,
+              name,
+              state: "approval-requested",
+              args: item.args ?? toolArgsFromApproval(update.toolCall),
+              approval: { approvalId: update.approvalId, toolCall: update.toolCall },
+            }
+          : item
+      );
+      return;
+    }
+
+    const id = ops.makeId();
+    const syntheticKey = toolSyntheticApprovalKey(update.turnId, update.approvalId);
+    stream.toolItemIdByKey.set(syntheticKey, id);
+    rememberLatestToolKey(stream, update.turnId, name, syntheticKey);
+    push({
+      id,
+      kind: "tool",
+      ts: ops.nowIso(),
+      name,
+      state: "approval-requested",
+      args: toolArgsFromApproval(update.toolCall),
+      approval: { approvalId: update.approvalId, toolCall: update.toolCall },
+    });
     return;
   }
 

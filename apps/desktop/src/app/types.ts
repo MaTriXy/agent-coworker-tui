@@ -74,10 +74,24 @@ export type TranscriptEvent = {
   payload: unknown;
 };
 
+export type ToolFeedState =
+  | "input-streaming"
+  | "input-available"
+  | "approval-requested"
+  | "output-available"
+  | "output-error"
+  | "output-denied";
+
+export type ToolApprovalMetadata = {
+  approvalId: string;
+  reason?: unknown;
+  toolCall?: unknown;
+};
+
 export type FeedItem =
   | { id: string; kind: "message"; role: "user" | "assistant"; ts: string; text: string }
   | { id: string; kind: "reasoning"; mode: "reasoning" | "summary"; ts: string; text: string }
-  | { id: string; kind: "tool"; ts: string; name: string; status: "running" | "done" | "error"; args?: unknown; result?: unknown }
+  | { id: string; kind: "tool"; ts: string; name: string; state: ToolFeedState; args?: unknown; result?: unknown; approval?: ToolApprovalMetadata }
   | { id: string; kind: "todos"; ts: string; todos: TodoItem[] }
   | { id: string; kind: "log"; ts: string; line: string }
   | { id: string; kind: "error"; ts: string; message: string; code: ServerErrorCode; source: ServerErrorSource }

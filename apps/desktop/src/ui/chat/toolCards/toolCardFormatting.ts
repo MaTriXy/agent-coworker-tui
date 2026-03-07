@@ -1,3 +1,4 @@
+import type { ToolFeedState } from "../../../app/types";
 import { ASK_SKIP_TOKEN } from "../../../lib/wsProtocol";
 
 type ToolCardDetailsRow = {
@@ -115,14 +116,17 @@ function summarizeAskResult(result: unknown): string | null {
   return `Answered ${nonEmpty.length} questions`;
 }
 
-function summarizeResult(name: string, status: "running" | "done" | "error", result: unknown): string {
-  if (status === "running") return "Working…";
-  if (status === "error") {
+function summarizeResult(name: string, state: ToolFeedState, result: unknown): string {
+  if (state === "input-streaming") return "Capturing input…";
+  if (state === "input-available") return "Running…";
+  if (state === "approval-requested") return "Waiting for approval";
+  if (state === "output-error" || state === "output-denied") {
     if (isRecord(result)) {
       const error = getRecordValue(result, ["error", "message", "reason"]);
-      if (error) return truncate(`Error: ${toText(error)}`, 90);
+      const prefix = state === "output-denied" ? "Denied" : "Error";
+      if (error) return truncate(`${prefix}: ${toText(error)}`, 90);
     }
-    return "Finished with an issue";
+    return state === "output-denied" ? "Denied" : "Finished with an issue";
   }
 
   if (!isRecord(result)) return "Completed";
@@ -150,8 +154,22 @@ function summarizeResult(name: string, status: "running" | "done" | "error", res
   return "Completed";
 }
 
-function buildDetailsRows(args: unknown, result: unknown, status: "running" | "done" | "error"): ToolCardDetailsRow[] {
-  const rows: ToolCardDetailsRow[] = [{ label: "Status", value: status === "running" ? "Running" : status === "done" ? "Done" : "Error" }];
+function buildDetailsRows(args: unknown, result: unknown, state: ToolFeedState): ToolCardDetailsRow[] {
+  const rows: ToolCardDetailsRow[] = [{
+    label: "Status",
+    value:
+      state === "input-streaming"
+        ? "Capturing Input"
+        : state === "input-available"
+          ? "Running"
+          : state === "approval-requested"
+            ? "Awaiting Approval"
+            : state === "output-available"
+              ? "Done"
+              : state === "output-denied"
+                ? "Denied"
+                : "Error",
+  }];
 
   if (isRecord(args)) {
     const command = getRecordValue(args, ["command", "cmd"]);
@@ -188,16 +206,16 @@ export function formatToolCard(
   name: string,
   args: unknown,
   result: unknown,
-  status: "running" | "done" | "error"
+  state: ToolFeedState
 ): ToolCardFormatting {
   const title = humanizeToolName(name);
   const argsSummary = summarizeArgs(name, args);
-  const resultSummary = summarizeResult(name, status, result);
+  const resultSummary = summarizeResult(name, state, result);
   const subtitle = argsSummary ? `${argsSummary} • ${resultSummary}` : resultSummary;
 
   return {
     title,
     subtitle,
-    details: buildDetailsRows(args, result, status),
+    details: buildDetailsRows(args, result, state),
   };
 }

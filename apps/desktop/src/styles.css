@@ -23,6 +23,8 @@
 
   --color-secondary: color-mix(in srgb, var(--accent) 16%, var(--panel-bg));
   --color-secondary-foreground: var(--text);
+  --color-accent: color-mix(in srgb, var(--accent) 18%, var(--panel-bg));
+  --color-accent-foreground: var(--text);
 
   --color-muted: color-mix(in srgb, var(--text) 6%, transparent);
   --color-muted-foreground: var(--muted);

@@ -10,6 +10,7 @@ import { parseConnectionStoreJson } from "./store/connections";
 import { defaultModelForProvider, getModelForProvider, getProviderKeyCandidates } from "./providers";
 import { resolveProviderName, resolveRuntimeName as resolveRuntimeNameFromValue } from "./types";
 import type { AgentConfig, CommandTemplateConfig, ProviderName, RuntimeName } from "./types";
+import { resolveCoworkHomedir } from "./utils/coworkHome";
 
 export { defaultModelForProvider } from "./providers";
 
@@ -184,10 +185,7 @@ function normalizeNonNegativeInt(v: unknown): number | undefined {
 }
 
 function resolveUserHomeFromConfig(config: AgentConfig): string {
-  if (typeof config.userAgentDir === "string" && config.userAgentDir) {
-    return path.dirname(config.userAgentDir);
-  }
-  return os.homedir();
+  return resolveCoworkHomedir(config.userAgentDir);
 }
 
 export function getSavedProviderApiKey(config: AgentConfig, provider: ProviderName): string | undefined {

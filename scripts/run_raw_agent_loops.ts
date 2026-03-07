@@ -70,7 +70,12 @@ type AttemptMeta = {
 
 type RawLoopArgs = {
   reportOnly: boolean;
-  scenario: "mixed" | "dcf-model-matrix" | "gpt-skill-reliability" | "google-customtools-tool-coverage";
+  scenario:
+    | "mixed"
+    | "dcf-model-matrix"
+    | "gpt-skill-reliability"
+    | "google-customtools-tool-coverage"
+    | "codex-gpt-5.4-smoke";
   onlyRunIds: string[];
   onlyModels: string[];
 };
@@ -96,7 +101,8 @@ function parseArgs(argv: string[]): RawLoopArgs {
         next !== "mixed" &&
         next !== "dcf-model-matrix" &&
         next !== "gpt-skill-reliability" &&
-        next !== "google-customtools-tool-coverage"
+        next !== "google-customtools-tool-coverage" &&
+        next !== "codex-gpt-5.4-smoke"
       ) {
         throw new Error(`Invalid --scenario value: ${next}`);
       }
@@ -120,7 +126,7 @@ function parseArgs(argv: string[]): RawLoopArgs {
     }
     if (a === "--help" || a === "-h") {
       console.log(
-        "Usage: bun scripts/run_raw_agent_loops.ts [--report-only] [--scenario mixed|dcf-model-matrix|gpt-skill-reliability|google-customtools-tool-coverage] [--only-run <run-id>] [--only-model <model>]"
+        "Usage: bun scripts/run_raw_agent_loops.ts [--report-only] [--scenario mixed|dcf-model-matrix|gpt-skill-reliability|google-customtools-tool-coverage|codex-gpt-5.4-smoke] [--only-run <run-id>] [--only-model <model>]"
       );
       process.exit(0);
     }
@@ -931,6 +937,41 @@ Final response must be raw JSON:
   ];
 }
 
+function buildCodexHarnessSmokeRuns(): RunSpec[] {
+  const model = "gpt-5.4";
+
+  return [
+    {
+      id: "codex-smoke-01-core-tools",
+      provider: "codex-cli",
+      model,
+      maxSteps: 90,
+      maxAttempts: 3,
+      requiredToolCalls: ["todoWrite", "bash", "grep", "read", "write", "glob"],
+      prompt: ({ runDir }) => `You are running inside workingDirectory="${runDir}". Keep ALL created files inside this working directory.
+
+Task: Smoke-test the harness against the current repo using a focused local tool loop.
+
+Steps (must use tools):
+1) Use todoWrite to create 4 items and set exactly one item to in_progress.
+2) Use bash to run: pwd
+3) Use write to create "harness_source.txt" containing at least 3 lines, and one line must include the exact text "runTurnWithDeps".
+4) Use grep with pattern "runTurnWithDeps" in path "harness_source.txt".
+5) Use read to read "harness_source.txt" (limit=120, offset=1).
+6) Use write to create "codex_harness_smoke.md" with:
+- A title
+- A short paragraph explaining what the harness run validated
+- 3 bullets summarizing what you observed from the repo/tooling
+7) Use glob with pattern "codex_harness_smoke.md".
+8) Use read to read "codex_harness_smoke.md" (limit=220, offset=1).
+9) Use todoWrite to mark all items completed.
+
+Final response must be raw JSON:
+{ "report": "<absolute path>", "end": "<<END_RUN>>" }`,
+    },
+  ];
+}
+
 function computeRetryDelayMs(err: unknown, attempt: number): number {
   const extracted = extractRetryDelayMs(err);
   const backoffBaseMs = 12_000;
@@ -976,7 +1017,9 @@ async function main() {
         ? "raw-agent-loop_dcf-model-matrix"
         : cliArgs.scenario === "gpt-skill-reliability"
           ? "raw-agent-loop_gpt-skill-reliability"
-          : "raw-agent-loop_google-customtools-tool-coverage";
+          : cliArgs.scenario === "google-customtools-tool-coverage"
+            ? "raw-agent-loop_google-customtools-tool-coverage"
+            : "raw-agent-loop_codex-gpt-5.4-smoke";
   const runRoot = path.join(baseConfig.outputDirectory || path.join(repoDir, "tmp"), `${runRootPrefix}_${safeStamp()}`);
   await ensureDir(runRoot);
 
@@ -1268,7 +1311,9 @@ Final response must be JSON with keys run_id, memo, and end="<<END_RUN>>".`,
         ? buildDcfModelMatrixRuns()
         : cliArgs.scenario === "gpt-skill-reliability"
           ? buildGptSkillReliabilityRuns()
-          : buildGoogleCustomtoolsToolCoverageRuns();
+          : cliArgs.scenario === "google-customtools-tool-coverage"
+            ? buildGoogleCustomtoolsToolCoverageRuns()
+            : buildCodexHarnessSmokeRuns();
   const runs = scenarioRuns.filter((run) => {
     if (cliArgs.onlyRunIds.length > 0 && !cliArgs.onlyRunIds.includes(run.id)) {
       return false;

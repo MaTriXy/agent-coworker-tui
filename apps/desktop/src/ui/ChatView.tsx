@@ -1,7 +1,7 @@
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import { AlertTriangleIcon, RotateCcwIcon } from "lucide-react";
+import { AlertTriangleIcon, MessageSquareIcon, RotateCcwIcon } from "lucide-react";
 
 import { useAppStore } from "../app/store";
 import type { FeedItem } from "../app/types";
@@ -16,10 +16,13 @@ import {
   MessageResponse,
 } from "../components/ai-elements/message";
 import {
+  PromptInputBody,
+  PromptInputFooter,
   PromptInputForm,
   PromptInputRoot,
   PromptInputSubmit,
   PromptInputTextarea,
+  PromptInputTools,
 } from "../components/ai-elements/prompt-input";
 import {
   Reasoning,
@@ -119,8 +122,9 @@ const FeedRow = memo(function FeedRow(props: { item: FeedItem }) {
       <ToolCard
         name={item.name}
         args={item.args}
+        approval={item.approval}
         result={item.result}
-        status={item.status}
+        state={item.state}
       />
     );
   }
@@ -193,7 +197,7 @@ function ThreadModelSelector({
         setThreadModel(threadId, p as ProviderName, mParts.join(":"));
       }}
     >
-      <SelectTrigger className="h-7 text-xs w-auto max-w-[200px] px-2.5 bg-transparent border-none shadow-none focus:ring-0 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
+      <SelectTrigger size="sm" className="w-auto max-w-[200px] border-none bg-transparent px-2.5 shadow-none focus:ring-0 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground">
         <span className="truncate"><SelectValue placeholder="Model" /></span>
       </SelectTrigger>
       <SelectContent>
@@ -345,7 +349,7 @@ export function ChatView() {
             {transcriptOnly ? (
               <Card className="max-w-3xl border-border/70 bg-muted/30">
                 <CardContent className="flex items-start gap-3 p-3">
-                  <AlertTriangleIcon className="mt-0.5 h-4 w-4 text-primary" />
+                  <AlertTriangleIcon className="mt-0.5 size-4 text-primary" />
                   <div>
                     <div className="font-semibold">Transcript view</div>
                     <div className="text-sm text-muted-foreground">Sending a message will continue in a new thread.</div>
@@ -362,7 +366,7 @@ export function ChatView() {
                     <div className="text-sm text-muted-foreground">Reconnect to continue this thread.</div>
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={() => void reconnectThread(selectedThreadId)}>
-                    <RotateCcwIcon className="h-3.5 w-3.5" />
+                    <RotateCcwIcon data-icon="inline-start" />
                     Reconnect
                   </Button>
                 </CardContent>
@@ -371,6 +375,7 @@ export function ChatView() {
 
             {visibleFeed.length === 0 ? (
               <ConversationEmptyState
+                icon={<MessageSquareIcon className="size-6" />}
                 title="New thread"
                 description="Send a message to start."
               />
@@ -390,30 +395,34 @@ export function ChatView() {
                 void sendMessage(composerText);
               }}
             >
-              {visibleFeed.length === 0 && rt?.config?.provider && rt?.config?.model && (
-                <div className="flex items-center self-end mb-1.5 ml-1">
-                  <ThreadModelSelector
-                    threadId={selectedThreadId}
-                    provider={rt.config.provider}
-                    model={rt.config.model}
-                    disabled={busy}
-                  />
-                  <div className="w-px h-5 bg-border/60 ml-1.5 mr-1" />
-                </div>
-              )}
-              <PromptInputTextarea
-                value={composerText}
-                disabled={disabled}
-                placeholder={placeholder}
-                onChange={setComposerText}
-                onKeyDown={onComposerKeyDown}
-                textareaRef={textareaRef}
-              />
-              <PromptInputSubmit
-                busy={busy}
-                disabled={disabled || !composerText.trim()}
-                onStop={() => cancelThread(selectedThreadId)}
-              />
+              <PromptInputBody>
+                <PromptInputTextarea
+                  ref={textareaRef}
+                  value={composerText}
+                  disabled={disabled}
+                  placeholder={placeholder}
+                  onChange={(event) => setComposerText(event.currentTarget.value)}
+                  onKeyDown={onComposerKeyDown}
+                  aria-label="Message input"
+                />
+              </PromptInputBody>
+              <PromptInputFooter>
+                <PromptInputTools>
+                  {visibleFeed.length === 0 && rt?.config?.provider && rt?.config?.model ? (
+                    <ThreadModelSelector
+                      threadId={selectedThreadId}
+                      provider={rt.config.provider}
+                      model={rt.config.model}
+                      disabled={busy}
+                    />
+                  ) : null}
+                </PromptInputTools>
+                <PromptInputSubmit
+                  status={busy ? "streaming" : "ready"}
+                  disabled={disabled || !composerText.trim()}
+                  onStop={() => cancelThread(selectedThreadId)}
+                />
+              </PromptInputFooter>
             </PromptInputForm>
           </PromptInputRoot>
           <div className={cn("mx-auto mt-2 max-w-3xl shrink-0 text-center text-xs text-muted-foreground", busy ? "opacity-100" : "opacity-70")}>

@@ -32,7 +32,7 @@ describe("legacy tool log normalization", () => {
         kind: "tool",
         ts: "2026-01-01T00:00:01.000Z",
         name: "bash",
-        status: "done",
+        state: "output-available",
         args: { command: "echo hi" },
         result: { stdout: "hi" },
       },

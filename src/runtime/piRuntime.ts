@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import { SpanStatusCode, trace, type AttributeValue, type Span } from "@opentelemetry/api";
 import { stream as piStream } from "@mariozechner/pi-ai";
 import { asFiniteNumber, asNonEmptyString, asRecord, asString, buildPiStreamOptions, extractToolCallsFromAssistant, isZodSchema, pickKnownPiModel, toPiJsonSchema, toolCallFromPartial, type PiModel, type PiToolCallLike } from "./piRuntimeOptions";
@@ -23,6 +21,7 @@ import {
   piTurnMessagesToModelMessages,
 } from "./piMessageBridge";
 import type { LlmRuntime, RuntimeRunTurnParams, RuntimeRunTurnResult, RuntimeStepOverride, RuntimeToolDefinition } from "./types";
+import { resolveCoworkHomedir } from "../utils/coworkHome";
 
 function safeJsonStringify(value: unknown): string {
   try {
@@ -124,12 +123,7 @@ function isAbortLikeError(error: unknown, signal?: AbortSignal): boolean {
 }
 
 function runtimeHomeFromConfig(config: AgentConfig): string | undefined {
-  if (typeof config.userAgentDir === "string" && config.userAgentDir) {
-    const marker = `${path.sep}.agent`;
-    const idx = config.userAgentDir.lastIndexOf(marker);
-    if (idx > 0) return config.userAgentDir.slice(0, idx);
-  }
-  return undefined;
+  return resolveCoworkHomedir(config.userAgentDir);
 }
 
 type ResolvedPiRuntimeModel = {

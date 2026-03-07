@@ -1,4 +1,4 @@
-import { forwardRef, type HTMLAttributes } from "react";
+import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
 
 import { ArrowDownIcon } from "lucide-react";
 
@@ -23,12 +23,14 @@ export function ConversationContent({ className, ...props }: ConversationContent
 export type ConversationEmptyStateProps = HTMLAttributes<HTMLDivElement> & {
   title?: string;
   description?: string;
+  icon?: ReactNode;
 };
 
 export function ConversationEmptyState({
   className,
   title = "No messages yet",
   description = "Start the conversation to see responses here.",
+  icon,
   children,
   ...props
 }: ConversationEmptyStateProps) {
@@ -39,6 +41,7 @@ export function ConversationEmptyState({
     >
       {children ?? (
         <>
+          {icon ? <div className="text-muted-foreground">{icon}</div> : null}
           <h3 className="text-base font-semibold text-foreground">{title}</h3>
           <p className="max-w-lg text-sm text-muted-foreground">{description}</p>
         </>
@@ -66,7 +69,7 @@ export function ConversationScrollButton({ visible, onClick }: ConversationScrol
       onClick={onClick}
       aria-label="Scroll to bottom"
     >
-      <ArrowDownIcon className="h-4 w-4" />
+      <ArrowDownIcon data-icon="scroll" />
     </Button>
   );
 }

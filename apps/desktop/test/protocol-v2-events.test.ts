@@ -505,11 +505,11 @@ describe("desktop protocol v2 mapping", () => {
     expect(tool?.kind).toBe("tool");
     if (!tool || tool.kind !== "tool") throw new Error("Expected tool feed item");
     expect(tool.name).toBe("read");
-    expect(tool.status).toBe("done");
+    expect(tool.state).toBe("output-available");
     expect(tool.result).toEqual({ chars: 42 });
   });
 
-  test("model stream approval/source/file/unknown parts render as system items", async () => {
+  test("model stream approval parts render as tool cards while source/file/unknown parts stay in system items", async () => {
     await useAppStore.getState().newThread({ workspaceId });
     const threadId = useAppStore.getState().selectedThreadId;
     if (!threadId) throw new Error("Expected selected thread");
@@ -571,11 +571,20 @@ describe("desktop protocol v2 mapping", () => {
     } as any);
 
     const feed = useAppStore.getState().threadRuntimeById[threadId]?.feed ?? [];
+    const tool = feed.find((item) => item.kind === "tool");
+    expect(tool?.kind).toBe("tool");
+    if (!tool || tool.kind !== "tool") throw new Error("Expected tool feed item");
+    expect(tool.name).toBe("bash");
+    expect(tool.state).toBe("approval-requested");
+    expect(tool.approval).toEqual({
+      approvalId: "ap-1",
+      toolCall: { toolName: "bash" },
+    });
+
     const systemLines = feed
       .filter((item) => item.kind === "system")
       .map((item) => (item.kind === "system" ? item.line : ""));
 
-    expect(systemLines.some((line) => line.includes("Tool approval requested"))).toBe(true);
     expect(systemLines.some((line) => line.includes("Source:"))).toBe(true);
     expect(systemLines.some((line) => line.includes("File:"))).toBe(true);
     expect(systemLines.some((line) => line.includes("Unhandled stream part (future_part)"))).toBe(true);

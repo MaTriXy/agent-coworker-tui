@@ -1,30 +1,47 @@
 import type { ComponentProps } from "react";
+import type { ToolFeedState } from "../../app/types";
 
-import { CheckCircleIcon, ChevronDownIcon, CircleIcon, ClockIcon, GlobeIcon, ListTodoIcon, SearchIcon, TerminalIcon, WrenchIcon, XCircleIcon } from "lucide-react";
+import {
+  CheckCircleIcon,
+  ChevronDownIcon,
+  CircleIcon,
+  ClockIcon,
+  GlobeIcon,
+  ListTodoIcon,
+  SearchIcon,
+  TerminalIcon,
+  WrenchIcon,
+  XCircleIcon,
+} from "lucide-react";
 
-import { cn } from "../../lib/utils";
+import { Badge } from "../ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
+import { cn } from "../../lib/utils";
 
-const statusLabel: Record<ToolState, string> = {
-  running: "Running",
-  done: "Done",
-  error: "Error",
+const stateLabel: Record<ToolFeedState, string> = {
+  "input-streaming": "Capturing Input",
+  "input-available": "Running",
+  "approval-requested": "Awaiting Approval",
+  "output-available": "Done",
+  "output-error": "Error",
+  "output-denied": "Denied",
 };
 
-type ToolState = "running" | "done" | "error";
-
 type ToolStatusIconProps = {
-  state: ToolState;
+  state: ToolFeedState;
 };
 
 function ToolStatusIcon({ state }: ToolStatusIconProps) {
-  if (state === "done") {
-    return <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-500/90" />;
+  if (state === "output-available") {
+    return <CheckCircleIcon className="size-3.5 text-emerald-500/90" />;
   }
-  if (state === "error") {
-    return <XCircleIcon className="h-3.5 w-3.5 text-destructive" />;
+  if (state === "output-error" || state === "output-denied") {
+    return <XCircleIcon className="size-3.5 text-destructive" />;
   }
-  return <ClockIcon className="h-3.5 w-3.5 animate-pulse text-primary" />;
+  if (state === "approval-requested") {
+    return <CircleIcon className="size-3.5 text-primary" />;
+  }
+  return <ClockIcon className={cn("size-3.5 text-primary", state === "input-streaming" && "animate-pulse")} />;
 }
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
@@ -44,7 +61,7 @@ export function Tool({ className, ...props }: ToolProps) {
 export type ToolHeaderProps = ComponentProps<typeof CollapsibleTrigger> & {
   title: string;
   subtitle?: string;
-  status: ToolState;
+  state: ToolFeedState;
 };
 
 function ToolIcon({ title, className }: { title: string; className?: string }) {
@@ -64,15 +81,15 @@ function ToolIcon({ title, className }: { title: string; className?: string }) {
   return <WrenchIcon className={className} />;
 }
 
-export function ToolHeader({ className, title, subtitle, status, ...props }: ToolHeaderProps) {
+export function ToolHeader({ className, title, subtitle, state, ...props }: ToolHeaderProps) {
   return (
     <CollapsibleTrigger
       className={cn("group flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left outline-none", className)}
       {...props}
     >
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-background shadow-sm ring-1 ring-border/40 transition-colors group-hover:bg-muted/50">
-          <ToolIcon title={title} className="h-3.5 w-3.5 text-muted-foreground/80" />
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-background shadow-sm ring-1 ring-border/40 transition-colors group-hover:bg-muted/50">
+          <ToolIcon title={title} className="size-3.5 text-muted-foreground/80" />
         </div>
         <div className="min-w-0 py-0.5">
           <div className="truncate font-semibold leading-tight text-[13px] text-foreground">{title}</div>
@@ -80,11 +97,14 @@ export function ToolHeader({ className, title, subtitle, status, ...props }: Too
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-3">
-        <div className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground/60 uppercase">
-          <ToolStatusIcon state={status} />
-          <span className="hidden sm:inline-block">{statusLabel[status]}</span>
-        </div>
-        <ChevronDownIcon className="h-4 w-4 text-muted-foreground/40 transition-transform group-data-[state=open]:rotate-180" />
+        <Badge
+          variant={state === "output-error" || state === "output-denied" ? "destructive" : state === "output-available" ? "outline" : "secondary"}
+          className="gap-1.5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+        >
+          <ToolStatusIcon state={state} />
+          <span>{stateLabel[state]}</span>
+        </Badge>
+        <ChevronDownIcon className="size-4 text-muted-foreground/40 transition-transform group-data-[state=open]:rotate-180" />
       </div>
     </CollapsibleTrigger>
   );
@@ -93,7 +113,7 @@ export function ToolHeader({ className, title, subtitle, status, ...props }: Too
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 
 export function ToolContent({ className, ...props }: ToolContentProps) {
-  return <CollapsibleContent className={cn("select-text space-y-4 px-3 pb-3 pt-1", className)} {...props} />;
+  return <CollapsibleContent className={cn("flex flex-col gap-4 px-3 pb-3 pt-1 select-text", className)} {...props} />;
 }
 
 export type ToolCodeBlockProps = {
@@ -104,7 +124,7 @@ export type ToolCodeBlockProps = {
 
 export function ToolCodeBlock({ label, value, tone = "default" }: ToolCodeBlockProps) {
   return (
-    <div className="space-y-1.5">
+    <div className="flex flex-col gap-1.5">
       <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{label}</div>
       <pre
         className={cn(

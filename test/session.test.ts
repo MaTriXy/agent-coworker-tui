@@ -1132,7 +1132,7 @@ describe("AgentSession", () => {
 
       await session.refreshProviderStatus();
 
-      expect(mockGetAiCoworkerPaths).toHaveBeenCalledWith({ homedir: path.dirname(config.userAgentDir) });
+      expect(mockGetAiCoworkerPaths).toHaveBeenCalledWith({ homedir: os.homedir() });
       expect(mockGetProviderStatuses).toHaveBeenCalledTimes(1);
 
       const evt = events.find((e) => e.type === "provider_status");

@@ -1,3 +1,70 @@
+# Task: Run the harness in this repo with Codex gpt-5.4
+
+## Plan
+- [x] Add `gpt-5.4` to the curated Codex model catalog if it is not already selectable.
+- [x] Add the smallest practical raw harness scenario/run for `codex-cli` using `gpt-5.4`.
+- [x] Execute the harness run against the current repo and inspect the generated artifacts/results.
+- [x] Run targeted verification and record the outcome.
+
+## Review
+- Added `gpt-5.4` to the curated Codex model list in `/Users/mweinbach/Projects/agent-coworker/src/providers/catalog.ts` and added a dedicated raw harness scenario, `codex-gpt-5.4-smoke`, in `/Users/mweinbach/Projects/agent-coworker/scripts/run_raw_agent_loops.ts`. The harness runbook now documents that scenario in `/Users/mweinbach/Projects/agent-coworker/docs/harness/runbook.md`.
+- The first harness attempt exposed a real bug in local auth resolution for harness runs: several paths derived the Cowork home directory from `dirname(userAgentDir)`, which broke when harness runs rewrote `userAgentDir` to `<runDir>/.agent-user`. That caused Codex auth lookup to fall back to `<runDir>/.cowork/auth/...` instead of the real `~/.cowork/auth/...`. Fixed by introducing `/Users/mweinbach/Projects/agent-coworker/src/utils/coworkHome.ts` and switching the affected config/runtime/session/model-adapter call sites to use it.
+- Also tightened the Codex smoke prompt so it only exercises files inside the harness working directory, avoiding false-negative permission denials from trying to read the parent repo while the run is sandboxed to the per-run output directory.
+- Successful harness run:
+  - Command: `AGENT_OUTPUT_DIR=output bun scripts/run_raw_agent_loops.ts --scenario codex-gpt-5.4-smoke --report-only`
+  - Run root: `/Users/mweinbach/Projects/agent-coworker/output/raw-agent-loop_codex-gpt-5.4-smoke_2026-03-07T01-05-56-136Z`
+  - Per-run dir: `/Users/mweinbach/Projects/agent-coworker/output/raw-agent-loop_codex-gpt-5.4-smoke_2026-03-07T01-05-56-136Z/codex-smoke-01-core-tools_codex-cli_gpt-5.4`
+  - Result: single successful attempt (`attempts.json` shows `ok: true`), `run_meta.json` shows `requestedModel`/`resolvedModel` both `gpt-5.4`, and `final.txt` contains the expected JSON with `<<END_RUN>>`.
+  - The generated report file is `/Users/mweinbach/Projects/agent-coworker/output/raw-agent-loop_codex-gpt-5.4-smoke_2026-03-07T01-05-56-136Z/codex-smoke-01-core-tools_codex-cli_gpt-5.4/codex_harness_smoke.md`.
+- Verification:
+  - `bun test test/runtime.pi-runtime.test.ts test/session.test.ts test/providers/codex-cli.test.ts apps/desktop/test/modelChoices.test.ts` -> pass (`188 pass, 0 fail`)
+  - `bun run docs:check` -> pass
+  - `bun test` -> pass (`1683 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+
+---
+
+# Task: Run and smoke-test the desktop app end to end
+
+## Plan
+- [x] Launch the Electron desktop app in dev mode and confirm it boots without fatal startup errors.
+- [x] Exercise the primary desktop chat UI path with the repo's browser automation workflow and capture any visible issues.
+- [x] Run relevant automated verification after the live smoke test and record the outcome.
+
+## Review
+- Launched the desktop app with `COWORK_ELECTRON_REMOTE_DEBUG=1 bun run desktop:dev`. Electron/Vite booted cleanly, the renderer loaded at `http://localhost:1420/`, and Electron exposed CDP on `ws://127.0.0.1:9222/...` with no startup crash. The only terminal warning during boot was the existing observability configuration warning from the bundled server.
+- Used the Playwright interactive workflow to attach to the live renderer over CDP and confirm the real window loaded (`Cowork Desktop`, `http://localhost:1420/`). The initial shell rendered the expected empty-state copy (`No workspaces yet`, `Let's build`, `Pick a workspace and start a new thread.`).
+- Continued the UI smoke test through the repo-supported desktop browser wrapper against the same CDP session. Verified Settings navigation (`Providers`, `Workspaces`, `Developer`) and return-to-app flow without renderer failure. After returning to the main app, the restored `Cowork Test` workspace/session rendered an active composer and file/context pane.
+- Exercised the compose/send path: filling the message box enabled the `Send message` button, and submitting did not crash the app. Instead, the app surfaced the provider configuration view (`Connect your AI providers to start chatting.` with connected Google/Codex CLI sections), which is consistent with a runtime that needs provider setup before chatting.
+- Verification:
+  - `bun test --cwd apps/desktop` -> pass (`122 pass, 0 fail`)
+  - `bun test` -> pass (`1683 pass, 2 skip, 0 fail`)
+
+---
+
+# Task: Align desktop app shadcn and ai-elements integration
+
+## Plan
+- [x] Add proper shadcn project metadata and `@/` alias wiring for `apps/desktop`.
+- [x] Update the vendored desktop shadcn primitives to match current shadcn composition and accessibility expectations where needed.
+- [x] Tighten the desktop `ai-elements` wrappers and chat surfaces so they compose cleanly with the shadcn layer.
+- [x] Run verification (`apps/desktop` tests, targeted repo tests, and shadcn/ai-elements CLI dry-run checks) and record the review.
+
+## Review
+- Added `/Users/mweinbach/Projects/agent-coworker/apps/desktop/components.json` plus `@/*` alias wiring in `/Users/mweinbach/Projects/agent-coworker/apps/desktop/tsconfig.json` and `/Users/mweinbach/Projects/agent-coworker/apps/desktop/electron.vite.config.ts` so `apps/desktop` is now a real shadcn project. `npx shadcn@latest info --json` now reports `config` and the installed desktop UI components instead of `config: null`.
+- Filled the missing `accent` semantic token in `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/styles.css` and normalized the vendored shadcn primitives (`button`, `badge`, `card`, `checkbox`, `dialog`, `input`, `select`, `textarea`) with app-local aliases, `data-slot` metadata, and more consistent icon sizing/composition.
+- Refactored the desktop `ai-elements` layer so the composer behaves like a compound component again: `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/components/ai-elements/prompt-input.tsx` now exposes `Body`/`Footer`/`Tools`, forwards primitive props/refs, restores a focus-within ring on the shell, and uses AI Elements-style `status` semantics for submit/stop actions. `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/ChatView.tsx` now consumes that structure and moves the model selector into the footer/tools row.
+- Fixed the desktop tool feed to preserve AI Elements-style lifecycle states instead of flattening them to `running|done|error`. `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/app/types.ts`, `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/app/store.feedMapping.ts`, `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/components/ai-elements/tool.tsx`, and `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/ui/chat/toolCards/*` now keep approval metadata, represent `approval-requested` / `output-denied` / `output-error` distinctly, and auto-expand terminal or approval-blocked tool cards.
+- Verification:
+  - `npx shadcn@latest info --json` in `apps/desktop` -> pass
+  - `npx shadcn@latest add @ai-elements/prompt-input --dry-run` in `apps/desktop` -> pass
+  - `bun test apps/desktop/test/protocol-v2-events.test.ts apps/desktop/test/legacy-tool-logs.test.ts apps/desktop/test/tool-card-formatting.test.ts apps/desktop/test/chat-reasoning-ui.test.ts` -> pass
+  - `bun test --cwd apps/desktop` -> pass (`122 pass, 0 fail`)
+  - `bun test` -> pass (`1683 pass, 2 skip, 0 fail`)
+  - `bun x tsc -p apps/desktop/tsconfig.json --noEmit` -> still fails on pre-existing unused-import / unrelated repo type issues in `apps/desktop/src/app/store.actions/*` and shared root `src/*` files; not introduced by this change
+
+---
+
 # Task: Close remaining PI runtime PR follow-ups (tool-call IDs + MCP error semantics)
 
 ## Plan

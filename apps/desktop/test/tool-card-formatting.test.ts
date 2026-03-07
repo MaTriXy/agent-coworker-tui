@@ -5,17 +5,17 @@ import { formatToolCard } from "../src/ui/chat/toolCards/toolCardFormatting";
 
 describe("tool card formatting ask summaries", () => {
   test("shows skipped summary for ask skip token", () => {
-    const out = formatToolCard("ask", { question: "What do you want?" }, { answer: ASK_SKIP_TOKEN }, "done");
+    const out = formatToolCard("ask", { question: "What do you want?" }, { answer: ASK_SKIP_TOKEN }, "output-available");
     expect(out.subtitle).toContain("Skipped");
   });
 
   test("shows rejected summary for empty ask answer", () => {
-    const out = formatToolCard("ask", { question: "What do you want?" }, { answer: "   " }, "done");
+    const out = formatToolCard("ask", { question: "What do you want?" }, { answer: "   " }, "output-available");
     expect(out.subtitle).toContain("No answer (rejected)");
   });
 
   test("shows answer preview for non-empty ask answer", () => {
-    const out = formatToolCard("ask", { question: "What do you want?" }, { answer: "Spreadsheet" }, "done");
+    const out = formatToolCard("ask", { question: "What do you want?" }, { answer: "Spreadsheet" }, "output-available");
     expect(out.subtitle).toContain("Answer: Spreadsheet");
   });
 });

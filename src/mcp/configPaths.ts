@@ -1,7 +1,7 @@
-import os from "node:os";
 import path from "node:path";
 
 import type { AgentConfig } from "../types";
+import { resolveCoworkHomedir } from "../utils/coworkHome";
 
 export const MCP_SERVERS_FILE_NAME = "mcp-servers.json";
 
@@ -21,7 +21,7 @@ export interface MCPConfigPaths {
 
 export function resolveMcpConfigPaths(config: AgentConfig): MCPConfigPaths {
   const workspaceRoot = path.dirname(config.projectAgentDir);
-  const userHome = config.userAgentDir ? path.dirname(config.userAgentDir) : os.homedir();
+  const userHome = resolveCoworkHomedir(config.userAgentDir);
 
   const workspaceCoworkDir = path.join(workspaceRoot, ".cowork");
   const userCoworkDir = path.join(userHome, ".cowork");
