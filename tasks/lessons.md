@@ -21,3 +21,4 @@
 - On Windows, never open OAuth URLs through `cmd /c start` without avoiding shell parsing; query-string `&` separators get split into separate commands and the browser receives a truncated auth URL.
 - When the user flags that the Windows version was not pushed, distinguish missing downloadable installer assets from missing auto-update metadata; a runtime updater fix does not satisfy release availability by itself.
 - When the user explicitly accepts unsigned Windows releases, prefer wiring GitHub Releases into the updater feed with explicit unsigned-update settings instead of forcing a signing-certificate setup they do not want.
+- When changing release workflow behavior that already has regression coverage, update the workflow tests in the same commit before tagging a release or CI will fail in `Validate` before packaging starts.

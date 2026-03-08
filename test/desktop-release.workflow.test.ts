@@ -21,7 +21,7 @@ describe("desktop release workflow", () => {
     );
   });
 
-  test("always uploads the Windows installer but only stages updater metadata when Windows signing secrets exist", () => {
+  test("always stages Windows updater metadata while keeping Windows signing optional", () => {
     expect(workflow).toMatch(
       /env:[\s\S]*?WIN_CSC_LINK: \$\{\{ secrets\.WIN_CSC_LINK \}\}[\s\S]*?WIN_CSC_KEY_PASSWORD: \$\{\{ secrets\.WIN_CSC_KEY_PASSWORD \}\}/,
     );
@@ -29,13 +29,13 @@ describe("desktop release workflow", () => {
       /- name: Stage Windows desktop release assets[\s\S]*?Get-Content apps\/desktop\/package\.json -Raw \| ConvertFrom-Json[\s\S]*?apps\/desktop\/release\/\*-\$version-win-\*\.exe[\s\S]*?Copy-Item \$installer\.FullName -Destination \$stagingDir/,
     );
     expect(workflow).toMatch(
-      /- name: Stage Windows desktop release assets[\s\S]*?if \(\$env:WIN_CSC_LINK -and \$env:WIN_CSC_KEY_PASSWORD\)[\s\S]*?Copy-Item \"apps\/desktop\/release\/latest\.yml\" -Destination \$stagingDir/,
+      /- name: Stage Windows desktop release assets[\s\S]*?Copy-Item \$blockmapPath -Destination \$stagingDir[\s\S]*?Copy-Item \"apps\/desktop\/release\/latest\.yml\" -Destination \$stagingDir/,
     );
     expect(workflow).toMatch(
       /- name: Verify Windows signing[\s\S]*?Get-Content apps\/desktop\/package\.json -Raw \| ConvertFrom-Json[\s\S]*?apps\/desktop\/release\/\*-\$version-win-\*\.exe/,
     );
-    expect(workflow).toContain("publishing the Windows installer only.");
-    expect(workflow).toContain("Skipping Windows latest.yml and blockmap upload so unsigned auto-update metadata is never published.");
+    expect(workflow).toContain("Windows signing secrets configured; publishing signed installer plus updater metadata.");
+    expect(workflow).toContain("WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD not configured; publishing unsigned installer plus updater metadata.");
     expect(workflow).not.toContain("- name: Skip unsigned Windows release upload");
     expect(workflow).toMatch(
       /- name: Upload Windows desktop artifacts[\s\S]*?if: \$\{\{ runner\.os == 'Windows' \}\}[\s\S]*?apps\/desktop\/release-upload\/\*/,

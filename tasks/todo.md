@@ -1364,3 +1364,23 @@
 - `C:\Users\maxw6\.bun\bin\bun.exe test --cwd apps\desktop` -> pass (`171 pass, 0 fail`)
 - `CSC_IDENTITY_AUTO_DISCOVERY=false C:\Users\maxw6\.bun\bin\bun.exe run desktop:build -- --publish never` -> pass
 - Built unsigned Windows release artifacts include both [latest.yml](/C:/Users/maxw6/Projects/agent-coworker/apps/desktop/release/latest.yml) and [Cowork-0.1.11-win-x64.exe.blockmap](/C:/Users/maxw6/Projects/agent-coworker/apps/desktop/release/Cowork-0.1.11-win-x64.exe.blockmap), which are the files the workflow now stages even without `WIN_CSC_*`
+
+# Task: Fix v0.1.11 desktop release CI validation failure
+
+## Plan
+- [x] Inspect the failed GitHub Actions run and identify the exact failing job/test.
+- [x] Align the desktop release workflow regression test with the new unsigned Windows updater contract.
+- [x] Rerun the relevant local verification commands, push the fix, and confirm the follow-up CI run starts cleanly.
+
+## Review
+- `Desktop Release` run `22825535762` failed in the `Validate` job before packaging began. The failing step was `bun test`, and the only failing test was `desktop release workflow > always uploads the Windows installer but only stages updater metadata when Windows signing secrets exist`.
+- Root cause: [desktop-release.workflow.test.ts](/C:/Users/maxw6/Projects/agent-coworker/test/desktop-release.workflow.test.ts) still asserted the pre-`0.1.11` behavior that unsigned Windows releases skip `latest.yml` and `.blockmap`, but the workflow now stages those files intentionally.
+- Updated the workflow regression test so it now expects the current contract: Windows release staging always copies the installer, `.blockmap`, and `latest.yml`, while signing remains optional and only changes the log message / signature path.
+- Bumped [package.json](/C:/Users/maxw6/Projects/agent-coworker/package.json) and [apps/desktop/package.json](/C:/Users/maxw6/Projects/agent-coworker/apps/desktop/package.json) from `0.1.11` to `0.1.12` so the corrected release can publish on a fresh tag without rewriting the failed `v0.1.11` tag.
+
+### Verification
+- `C:\Users\maxw6\.bun\bin\bun.exe run docs:check` -> pass
+- `C:\Users\maxw6\.bun\bin\bun.exe test test\desktop-release.workflow.test.ts` -> pass (`2 pass, 0 fail`)
+- `C:\Users\maxw6\.bun\bin\bun.exe run typecheck` -> pass
+- `CSC_IDENTITY_AUTO_DISCOVERY=false C:\Users\maxw6\.bun\bin\bun.exe run desktop:build -- --publish never` -> pass; produced `apps/desktop/release/Cowork-0.1.12-win-x64.exe` and `.blockmap`
+- `C:\Users\maxw6\.bun\bin\bun.exe test` -> still fails on this Windows machine in pre-existing unrelated `webSearch` and `memory` cases (`4 fail` total); the `desktop-release.workflow` regression now passes locally, and the failed GitHub Actions run showed this was the only CI failure in `Validate`
