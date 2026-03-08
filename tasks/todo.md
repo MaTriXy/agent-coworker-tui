@@ -1,3 +1,25 @@
+# Task: Remove broken Windows desktop release artifacts
+
+## Plan
+- [x] Remove the published Windows desktop assets and Windows updater manifest from the stable GitHub releases that currently expose them.
+- [x] Keep the existing CI packaging intact; only change the public GitHub release assets/notes.
+- [x] Verify the release pages and repo state after the removals, then record the outcome below.
+
+## Review
+- Removed the Windows release assets from the stable public releases `v0.1.1` and `v0.1.2`:
+  - `Cowork-<version>-win-x64.exe`
+  - `Cowork-<version>-win-x64.exe.blockmap`
+  - `latest.yml`
+- Left CI packaging untouched. The existing `Desktop Release` workflow still builds Windows in GitHub Actions; only the published release pages were cleaned up.
+- Updated the release pages so they no longer imply Windows support:
+  - `v0.1.2` is now titled `release 0.1.2 updater hotfix` and explicitly says I broke `v0.1.1` with the packaged `electron-updater` import mistake.
+  - `v0.1.1` is now titled `release 0.1.1 broken superseded` and explicitly warns users not to use it.
+- Verification:
+  - `/Users/mweinbach/Projects/agent-coworker/.github/workflows/desktop-release.yml` is unchanged; CI packaging still includes Windows.
+  - `gh release view v0.1.2 --json assets,name,body` shows only macOS assets and `latest-mac.yml`.
+  - `gh release view v0.1.1 --json assets,name,body` shows only macOS assets and `latest-mac.yml`.
+  - `git status --short --branch` shows only the intentional task-tracking updates before commit.
+
 # Task: Ship 0.1.2 to replace the broken 0.1.1 desktop release
 
 ## Plan
