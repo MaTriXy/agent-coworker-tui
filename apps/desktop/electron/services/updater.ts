@@ -1,10 +1,13 @@
-import { autoUpdater, type ProgressInfo, type UpdateDownloadedEvent, type UpdateInfo } from "electron-updater";
+import { createRequire } from "node:module";
+
+import type { ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from "electron-updater";
 
 import { createDefaultUpdaterState, type UpdaterReleaseInfo, type UpdaterState } from "../../src/lib/desktopApi";
 
 const AUTOMATIC_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const STARTUP_CHECK_DELAY_MS = 10 * 1000;
 const RELEASE_NOTES_URL = "https://github.com/mweinbach/agent-coworker/releases/latest";
+const require = createRequire(import.meta.url);
 
 type UpdaterEventHandler = (...args: any[]) => void;
 
@@ -15,6 +18,50 @@ export interface UpdaterClient {
   on(event: string, handler: UpdaterEventHandler): this;
   checkForUpdates(): Promise<unknown>;
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
+}
+
+function isUpdaterClient(value: unknown): value is UpdaterClient {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.on === "function" &&
+    typeof candidate.checkForUpdates === "function" &&
+    typeof candidate.quitAndInstall === "function"
+  );
+}
+
+function resolveAutoUpdaterClient(moduleValue: unknown): UpdaterClient {
+  if (!moduleValue || typeof moduleValue !== "object") {
+    throw new Error("electron-updater module did not expose an autoUpdater client");
+  }
+
+  const record = moduleValue as Record<string, unknown>;
+  const directClient = record.autoUpdater;
+  if (isUpdaterClient(directClient)) {
+    return directClient;
+  }
+
+  const defaultExport = record.default;
+  if (defaultExport && typeof defaultExport === "object") {
+    const nestedClient = (defaultExport as Record<string, unknown>).autoUpdater;
+    if (isUpdaterClient(nestedClient)) {
+      return nestedClient;
+    }
+  }
+
+  throw new Error("electron-updater autoUpdater export was not found");
+}
+
+let cachedDefaultUpdater: UpdaterClient | null = null;
+
+function getDefaultUpdaterClient(): UpdaterClient {
+  if (cachedDefaultUpdater) {
+    return cachedDefaultUpdater;
+  }
+  cachedDefaultUpdater = resolveAutoUpdaterClient(require("electron-updater"));
+  return cachedDefaultUpdater;
 }
 
 type DesktopUpdaterServiceOptions = {
@@ -115,7 +162,7 @@ export class DesktopUpdaterService {
     this.isPackaged = options.isPackaged;
     this.onStateChange = options.onStateChange;
     this.notifyUpdateReady = options.notifyUpdateReady;
-    this.updater = options.updater ?? autoUpdater;
+    this.updater = options.updater ?? getDefaultUpdaterClient();
     this.now = options.now ?? (() => new Date().toISOString());
     this.setIntervalFn = options.setIntervalFn ?? setInterval;
     this.clearIntervalFn = options.clearIntervalFn ?? clearInterval;
@@ -292,3 +339,8 @@ export class DesktopUpdaterService {
     this.onStateChange?.(this.getState());
   }
 }
+
+export const __internal = {
+  getDefaultUpdaterClient,
+  resolveAutoUpdaterClient,
+};

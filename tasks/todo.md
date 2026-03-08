@@ -1,3 +1,23 @@
+# Task: Fix packaged desktop auto-updater startup after the 0.1.1 release
+
+## Plan
+- [x] Reproduce or inspect the packaged startup failure and confirm whether `electron-updater` is being imported incompatibly in the Electron main process.
+- [x] Patch the updater service to load `electron-updater` safely from the packaged ESM main process, and add regression coverage for the module-resolution path.
+- [x] Run focused desktop validation and record the verified fix plus any remaining release follow-up.
+
+## Review
+- Root cause: `/Users/mweinbach/Projects/agent-coworker/apps/desktop/electron/services/updater.ts` imported `autoUpdater` as a named ESM export from `electron-updater`, but the packaged Electron main process resolves that dependency as CommonJS. The released `v0.1.1` app therefore crashed during startup with the CommonJS/ESM interop error before the updater service could initialize.
+- Fixed the loader by switching the main-process updater service to `createRequire(import.meta.url)` and resolving `autoUpdater` from either the direct CommonJS module shape or a default-wrapped interop shape. The actual `electron-updater` module is now loaded lazily, so tests and non-Electron contexts no longer instantiate `AppUpdater` at import time.
+- Added regression coverage in `/Users/mweinbach/Projects/agent-coworker/apps/desktop/test/updater-service.test.ts` for direct CommonJS export shape, default-wrapped interop shape, and the missing-export failure case.
+- Verification:
+  - `bun test apps/desktop/test/updater-service.test.ts` -> pass (`6 pass, 0 fail`)
+  - `bun test --cwd apps/desktop` -> pass (`165 pass, 0 fail`)
+  - `bun run typecheck` -> pass
+  - `bun test` -> pass (`1749 pass, 2 skip, 0 fail`)
+  - `bun run desktop:build -- --publish never` -> pass
+  - `git diff --check` -> pass
+- Release follow-up: this fixes `main`, but the already-published `v0.1.1` binaries remain broken until a new desktop release is cut or the release is otherwise superseded.
+
 # Task: Merge remote desktop fixes and ship release 0.1.1
 
 ## Plan

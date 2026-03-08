@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { DesktopUpdaterService, type UpdaterClient } from "../electron/services/updater";
+import { __internal, DesktopUpdaterService, type UpdaterClient } from "../electron/services/updater";
 
 type Handler = (...args: any[]) => void;
 
@@ -29,6 +29,32 @@ class FakeUpdater implements UpdaterClient {
 }
 
 describe("desktop updater service", () => {
+  test("resolves autoUpdater from direct CommonJS export shape", () => {
+    const updater = new FakeUpdater();
+
+    const resolved = __internal.resolveAutoUpdaterClient({
+      autoUpdater: updater,
+    });
+
+    expect(resolved).toBe(updater);
+  });
+
+  test("resolves autoUpdater from default-wrapped interop shape", () => {
+    const updater = new FakeUpdater();
+
+    const resolved = __internal.resolveAutoUpdaterClient({
+      default: {
+        autoUpdater: updater,
+      },
+    });
+
+    expect(resolved).toBe(updater);
+  });
+
+  test("throws when autoUpdater export is unavailable", () => {
+    expect(() => __internal.resolveAutoUpdaterClient({})).toThrow("autoUpdater export was not found");
+  });
+
   test("stays disabled for unpackaged builds", async () => {
     const updater = new FakeUpdater();
     const service = new DesktopUpdaterService({
