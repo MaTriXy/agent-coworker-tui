@@ -1,30 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import {
+  buildSidecarManifest,
+  resolvePackagedSidecarFilename,
+} from "../apps/desktop/electron/services/sidecar";
+
 async function rmrf(p: string) {
   await fs.rm(p, { recursive: true, force: true });
-}
-
-function resolveDesktopTargetTriple(): string {
-  const platform = process.platform;
-  const arch = process.arch;
-
-  if (platform === "win32") {
-    if (arch === "x64") return "x86_64-pc-windows-msvc";
-    if (arch === "arm64") return "aarch64-pc-windows-msvc";
-  }
-
-  if (platform === "darwin") {
-    if (arch === "x64") return "x86_64-apple-darwin";
-    if (arch === "arm64") return "aarch64-apple-darwin";
-  }
-
-  if (platform === "linux") {
-    if (arch === "x64") return "x86_64-unknown-linux-gnu";
-    if (arch === "arm64") return "aarch64-unknown-linux-gnu";
-  }
-
-  throw new Error(`Unsupported platform/arch for desktop sidecar: ${platform}/${arch}`);
 }
 
 async function copyDir(src: string, dest: string) {
@@ -89,12 +72,11 @@ async function main() {
   // Build a standalone server sidecar so end users don't need Bun installed.
   // Electron packaging picks this up from apps/desktop/resources/binaries.
   const desktopBinariesDir = path.join(root, "apps", "desktop", "resources", "binaries");
+  await rmrf(desktopBinariesDir);
   await fs.mkdir(desktopBinariesDir, { recursive: true });
 
-  const targetTriple = resolveDesktopTargetTriple();
-  const sidecarBaseName = "cowork-server";
-  const sidecarExt = process.platform === "win32" ? ".exe" : "";
-  const sidecarOutfile = path.join(desktopBinariesDir, `${sidecarBaseName}-${targetTriple}${sidecarExt}`);
+  const manifest = buildSidecarManifest();
+  const sidecarOutfile = path.join(desktopBinariesDir, resolvePackagedSidecarFilename());
   await fs.rm(sidecarOutfile, { force: true }).catch(() => {});
 
   const compileArgs = [
@@ -119,6 +101,8 @@ async function main() {
   });
   const sidecarCode = await sidecarProc.exited;
   if (sidecarCode !== 0) process.exit(sidecarCode);
+
+  await fs.writeFile(path.join(desktopBinariesDir, "cowork-server-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
   // The desktop sidecar still needs built-in prompts/config under dist/{prompts,config}.
   // Curated skills are bootstrapped into ~/.cowork/skills on first desktop startup instead

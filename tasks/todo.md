@@ -1,3 +1,35 @@
+# Task: Ensure packaged desktop builds ship and launch the pinned bundled agent sidecar
+
+## Plan
+- [x] Inspect the desktop resource bundling and packaged runtime launch path to confirm how the compiled app locates its backend binary.
+- [x] Make the desktop build emit exactly one pinned packaged sidecar plus metadata, and make the runtime resolve that exact bundled binary instead of loosely scanning `cowork-server-*`.
+- [x] Run desktop-focused verification and record the final bundled-binary behavior below.
+
+## Review
+- Verified the current packaged app contents before changing code:
+  - `apps/desktop/release/mac-arm64/Cowork.app/Contents/Resources/binaries/cowork-server-aarch64-apple-darwin` is present in the built app and ZIP.
+  - The existing runtime still selected a sidecar by scanning for the first matching `cowork-server-*` entry, which meant stale binaries in `apps/desktop/resources/binaries/` could be shipped and selected nondeterministically.
+- Updated the sidecar pipeline so the packaged build now has an explicit pinned binary contract:
+  - Added `/Users/mweinbach/Projects/agent-coworker/apps/desktop/electron/services/sidecar.ts` with the shared target-triple, packaged filename, manifest, and packaged-binary resolution logic.
+  - Updated `/Users/mweinbach/Projects/agent-coworker/scripts/build_desktop_resources.ts` to clear `apps/desktop/resources/binaries/` before building, compile exactly one sidecar for the current target, and write `cowork-server-manifest.json` next to it.
+  - Updated `/Users/mweinbach/Projects/agent-coworker/apps/desktop/electron/services/serverManager.ts` so packaged desktop startup resolves the manifest-pinned sidecar (or the exact expected platform filename as fallback) instead of grabbing an arbitrary `cowork-server-*` file.
+
+### Verification
+- `bun test apps/desktop/test/sidecar.test.ts apps/desktop/test/server-manager.test.ts` -> pass (`12 pass, 0 fail`)
+- `bun run typecheck` -> pass
+- `bun test` -> pass (`1736 pass, 2 skip, 0 fail`)
+- `bun run build:desktop-resources` -> pass; emitted only:
+  - `apps/desktop/resources/binaries/cowork-server-aarch64-apple-darwin`
+  - `apps/desktop/resources/binaries/cowork-server-manifest.json`
+- `bun run --cwd apps/desktop build:dir` -> pass; built app now contains:
+  - `apps/desktop/release/mac-arm64/Cowork.app/Contents/Resources/binaries/cowork-server-aarch64-apple-darwin`
+  - `apps/desktop/release/mac-arm64/Cowork.app/Contents/Resources/binaries/cowork-server-manifest.json`
+- Verified the packaged manifest contents:
+  - `filename: cowork-server-aarch64-apple-darwin`
+  - `targetTriple: aarch64-apple-darwin`
+
+---
+
 # Task: Cut a test desktop release with the updated icon assets
 
 ## Plan

@@ -13,3 +13,4 @@
 - For desktop chat file listings, auto-link bare absolute local file paths in the Streamdown remark transform and shorten labels to basenames there; do not rely on the model to author markdown links or try to fix it only at the anchor component layer.
 - For new Apple desktop icon formats, verify the current Apple and Electron packaging docs first; do not assume the repo still needs an `.icns`-only workflow when the user hands over an Icon Composer `.icon` asset.
 - Before cutting a release tag, confirm whether branding assets like icons are still in flux; do not ship a temporary no-icon release if the user is about to provide the real asset.
+- For packaged desktop releases, inspect the built app bundle and runtime launcher together; do not assume `extraResources` alone guarantees the correct pinned sidecar binary is the one actually shipped and executed.

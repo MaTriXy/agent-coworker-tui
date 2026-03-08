@@ -8,9 +8,9 @@ import { z } from "zod";
 import { app } from "electron";
 
 import { assertSafeId, assertWorkspaceDirectory } from "./validation";
+import { findPackagedSidecarBinary } from "./sidecar";
 
 const SERVER_STARTUP_TIMEOUT_MS = 15_000;
-const SIDECAR_BASE_NAME = "cowork-server";
 const STDERR_TAIL_LIMIT = 16_384;
 const WINDOWS_SOURCE_START_ATTEMPTS = 2;
 
@@ -71,32 +71,10 @@ function getSidecarSearchDirs(): string[] {
   return [path.join(appRoot, "resources", "binaries")];
 }
 
-function matchesSidecarFilename(name: string): boolean {
-  if (process.platform === "win32") {
-    return name.startsWith(`${SIDECAR_BASE_NAME}-`) && name.endsWith(".exe");
-  }
-  return name === SIDECAR_BASE_NAME || name.startsWith(`${SIDECAR_BASE_NAME}-`);
-}
-
 function findSidecarBinary(): string {
-  const explicit = process.env.COWORK_DESKTOP_SIDECAR_PATH;
-  if (explicit && fs.existsSync(explicit)) {
-    return explicit;
-  }
-
-  for (const dir of getSidecarSearchDirs()) {
-    if (!fs.existsSync(dir)) {
-      continue;
-    }
-
-    const entries = fs.readdirSync(dir);
-    const match = entries.find((entry) => matchesSidecarFilename(entry));
-    if (match) {
-      return path.join(dir, match);
-    }
-  }
-
-  throw new Error("Server sidecar binary not found");
+  return findPackagedSidecarBinary(getSidecarSearchDirs(), {
+    explicitPath: process.env.COWORK_DESKTOP_SIDECAR_PATH,
+  });
 }
 
 function waitForExit(child: ServerChildProcess, timeoutMs: number): Promise<boolean> {
@@ -439,6 +417,7 @@ export class ServerManager {
 export const __internal = {
   buildServerEnv,
   buildSourceEnvForAttempt,
+  findSidecarBinary,
   isLikelyBunSegfault,
   resolveSourceStartup,
   waitForServerListening,
