@@ -156,10 +156,14 @@ export async function runCliRepl(
     console.log("  /exit                 Quit");
     console.log("  /new                  Clear conversation");
     console.log("  /restart              Restart server and auto-resume latest session");
-    console.log("  /model <id>            Set model id for this session");
-    console.log(`  /provider <name>       Set provider (${UI_PROVIDER_NAMES.join("|")})`);
-    console.log(`  /connect <name> [key]  Connect via auth methods (${UI_PROVIDER_NAMES.join("|")})`);
-    console.log("  /cwd <path>            Set working directory for this session");
+    console.log("  /model <id>           Set model id for this session");
+    console.log(`  /provider <name>      Set provider (${UI_PROVIDER_NAMES.join("|")})`);
+    console.log("  /verbosity <level>    Set active-provider verbosity (low|medium|high)");
+    console.log("  /reasoning-effort <level>  Set active-provider reasoning effort (none|low|medium|high|xhigh)");
+    console.log("  /effort <level>       Alias for /reasoning-effort");
+    console.log("  /reasoning-summary <mode>  Set active-provider reasoning summary (auto|concise|detailed)");
+    console.log(`  /connect <name> [key] Connect via auth methods (${UI_PROVIDER_NAMES.join("|")})`);
+    console.log("  /cwd <path>           Set working directory for this session");
     console.log("  /sessions             List sessions from the server");
     console.log("  /resume <sessionId>   Reconnect to a specific session");
     console.log("  /tools                List tool names\n");
@@ -487,6 +491,7 @@ export async function runCliRepl(
           rl,
           getSessionId: () => sessionId,
           getBusy: () => busy,
+          getConfig: () => config,
           getProviderList: () => providerList,
           getProviderAuthMethods: () => providerAuthMethods,
           trySend: (msg) => {

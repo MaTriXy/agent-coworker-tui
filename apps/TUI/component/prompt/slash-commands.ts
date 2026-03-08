@@ -1,9 +1,24 @@
 import type { AutocompleteItem } from "./autocomplete";
+import { showToast } from "../../ui/toast";
 
 type LocalSlashDependencies = {
   syncActions: {
     reset: () => void;
     cancel: () => void;
+    setConfig: (config: {
+      providerOptions?: {
+        openai?: {
+          reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
+          reasoningSummary?: "auto" | "concise" | "detailed";
+          textVerbosity?: "low" | "medium" | "high";
+        };
+        "codex-cli"?: {
+          reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
+          reasoningSummary?: "auto" | "concise" | "detailed";
+          textVerbosity?: "low" | "medium" | "high";
+        };
+      };
+    }) => void;
     setProviderApiKey: (provider: string, methodId: string, apiKey: string) => void;
     requestHarnessContext: () => void;
     setHarnessContext: (context: {
@@ -18,11 +33,17 @@ type LocalSlashDependencies = {
   route: {
     navigate: (next: { route: "home" } | { route: "session"; sessionId: string }) => void;
   };
+  getCurrentProvider: () => string;
   dialog: unknown;
   exit: {
     exit: () => void;
   };
 };
+
+const OPENAI_COMPATIBLE_PROVIDERS = new Set(["openai", "codex-cli"]);
+const TEXT_VERBOSITY_VALUES = new Set(["low", "medium", "high"]);
+const REASONING_EFFORT_VALUES = new Set(["none", "low", "medium", "high", "xhigh"]);
+const REASONING_SUMMARY_VALUES = new Set(["auto", "concise", "detailed"]);
 
 export type LocalSlashCommand = {
   name: string;
@@ -58,6 +79,63 @@ function buildDefaultHarnessContext(objectiveOverride: string) {
       createdAt: isoNow,
     },
   };
+}
+
+function activeOpenAICompatibleProvider(deps: LocalSlashDependencies): "openai" | "codex-cli" | null {
+  const provider = deps.getCurrentProvider().trim();
+  return OPENAI_COMPATIBLE_PROVIDERS.has(provider) ? (provider as "openai" | "codex-cli") : null;
+}
+
+function setActiveProviderOption(
+  deps: LocalSlashDependencies,
+  field: "textVerbosity" | "reasoningEffort" | "reasoningSummary",
+  rawValue: string
+) {
+  const provider = activeOpenAICompatibleProvider(deps);
+  if (!provider) {
+    showToast("Switch to OpenAI or Codex CLI first", "error");
+    return;
+  }
+
+  const value = rawValue.trim().toLowerCase();
+  if (!value) {
+    showToast(
+      field === "textVerbosity"
+        ? "Usage: /verbosity <low|medium|high>"
+        : field === "reasoningEffort"
+          ? "Usage: /reasoning-effort <none|low|medium|high|xhigh>"
+          : "Usage: /reasoning-summary <auto|concise|detailed>",
+      "warning"
+    );
+    return;
+  }
+
+  if (field === "textVerbosity" && !TEXT_VERBOSITY_VALUES.has(value)) {
+    showToast("Verbosity must be low, medium, or high", "error");
+    return;
+  }
+
+  if (field === "reasoningEffort" && !REASONING_EFFORT_VALUES.has(value)) {
+    showToast("Reasoning effort must be none, low, medium, high, or xhigh", "error");
+    return;
+  }
+
+  if (field === "reasoningSummary" && !REASONING_SUMMARY_VALUES.has(value)) {
+    showToast("Reasoning summary must be auto, concise, or detailed", "error");
+    return;
+  }
+
+  deps.syncActions.setConfig({
+    providerOptions: {
+      [provider]: {
+        [field]: value,
+      },
+    },
+  });
+  showToast(
+    `${provider} ${field === "textVerbosity" ? "verbosity" : field === "reasoningEffort" ? "reasoning effort" : "reasoning summary"} updated`,
+    "success"
+  );
 }
 
 function parseWithKnownCommandNames(
@@ -231,6 +309,33 @@ export function createLocalSlashCommands(deps: LocalSlashDependencies): LocalSla
 
         const { openProviderDialog } = await import("../dialog-provider");
         openProviderDialog(deps.dialog as any);
+      },
+    },
+    {
+      name: "verbosity",
+      aliases: [],
+      description: "Set verbosity for the active OpenAI-compatible provider",
+      icon: "v",
+      execute: (argumentsText) => {
+        setActiveProviderOption(deps, "textVerbosity", argumentsText);
+      },
+    },
+    {
+      name: "reasoning-effort",
+      aliases: ["effort"],
+      description: "Set reasoning effort for the active OpenAI-compatible provider",
+      icon: "r",
+      execute: (argumentsText) => {
+        setActiveProviderOption(deps, "reasoningEffort", argumentsText);
+      },
+    },
+    {
+      name: "reasoning-summary",
+      aliases: [],
+      description: "Set reasoning summary for the active OpenAI-compatible provider",
+      icon: "S",
+      execute: (argumentsText) => {
+        setActiveProviderOption(deps, "reasoningSummary", argumentsText);
       },
     },
     {

@@ -339,7 +339,96 @@ describe("workspace settings sync", () => {
     expect(runtime?.controlSessionConfig?.subAgentModel).toBe("gpt-5-mini");
   });
 
+  test("control session_config merges editable providerOptions into workspace defaults", async () => {
+    useAppStore.setState((state) => ({
+      ...state,
+      workspaces: state.workspaces.map((workspace) =>
+        workspace.id === workspaceId
+          ? {
+              ...workspace,
+              providerOptions: {
+                openai: {
+                  reasoningEffort: "high",
+                  reasoningSummary: "detailed",
+                },
+              },
+            }
+          : workspace,
+      ),
+    }));
+
+    await useAppStore.getState().newThread({ workspaceId });
+    const controlSocket = socketByClient("desktop-control");
+    emitServerHello(controlSocket, "control-session");
+
+    controlSocket.emit({
+      type: "session_config",
+      sessionId: "control-session",
+      config: {
+        yolo: false,
+        observabilityEnabled: true,
+        subAgentModel: "gpt-5.4-mini",
+        providerOptions: {
+          openai: {
+            reasoningSummary: "concise",
+            textVerbosity: "high",
+          },
+          "codex-cli": {
+            reasoningEffort: "xhigh",
+            reasoningSummary: "auto",
+          },
+        },
+      },
+    });
+
+    const workspace = useAppStore.getState().workspaces.find((entry) => entry.id === workspaceId);
+    const runtime = useAppStore.getState().workspaceRuntimeById[workspaceId];
+    expect(workspace?.providerOptions).toEqual({
+      openai: {
+        reasoningEffort: "high",
+        reasoningSummary: "concise",
+        textVerbosity: "high",
+      },
+      "codex-cli": {
+        reasoningEffort: "xhigh",
+        reasoningSummary: "auto",
+      },
+    });
+    expect((runtime?.controlSessionConfig as any)?.providerOptions).toEqual({
+      openai: {
+        reasoningSummary: "concise",
+        textVerbosity: "high",
+      },
+      "codex-cli": {
+        reasoningEffort: "xhigh",
+        reasoningSummary: "auto",
+      },
+    });
+  });
+
   test("applyWorkspaceDefaultsToThread sends model, session config, and mcp toggle", async () => {
+    useAppStore.setState((state) => ({
+      ...state,
+      workspaces: state.workspaces.map((workspace) =>
+        workspace.id === workspaceId
+          ? {
+              ...workspace,
+              providerOptions: {
+                openai: {
+                  reasoningEffort: "high",
+                  reasoningSummary: "detailed",
+                  textVerbosity: "medium",
+                },
+                "codex-cli": {
+                  reasoningEffort: "medium",
+                  reasoningSummary: "auto",
+                },
+              },
+            }
+          : workspace,
+      ),
+    }));
+
     await useAppStore.getState().newThread({ workspaceId });
     const controlSocket = socketByClient("desktop-control");
     emitServerHello(controlSocket, "control-session");
@@ -353,9 +442,43 @@ describe("workspace settings sync", () => {
 
     const sentTypes = threadSocket.sent.map((message) => message?.type);
     expect(sentTypes).toEqual(["set_model", "set_config", "set_enable_mcp"]);
+    expect(threadSocket.sent[1]).toMatchObject({
+      type: "set_config",
+      config: {
+        subAgentModel: "gpt-5.2",
+        providerOptions: {
+          openai: {
+            reasoningEffort: "high",
+            reasoningSummary: "detailed",
+            textVerbosity: "medium",
+          },
+          "codex-cli": {
+            reasoningEffort: "medium",
+            reasoningSummary: "auto",
+          },
+        },
+      },
+    });
   });
 
   test("updateWorkspaceDefaults applies to all live threads and retries queued busy thread", async () => {
+    useAppStore.setState((state) => ({
+      ...state,
+      workspaces: state.workspaces.map((workspace) =>
+        workspace.id === workspaceId
+          ? {
+              ...workspace,
+              providerOptions: {
+                openai: {
+                  reasoningEffort: "high",
+                  reasoningSummary: "detailed",
+                },
+              },
+            }
+          : workspace,
+      ),
+    }));
+
     await useAppStore.getState().newThread({ workspaceId });
     await useAppStore.getState().newThread({ workspaceId });
 
@@ -380,18 +503,62 @@ describe("workspace settings sync", () => {
       defaultModel: "gpt-5.2",
       defaultSubAgentModel: "gpt-5.2-mini",
       defaultEnableMcp: false,
+      providerOptions: {
+        openai: {
+          reasoningSummary: "concise",
+          textVerbosity: "high",
+        },
+        "codex-cli": {
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+        },
+      },
     });
 
     const controlSent = controlSocket.sent.map((message) => message?.type);
     expect(controlSent).toContain("set_model");
     expect(controlSent).toContain("set_config");
     expect(controlSent).toContain("set_enable_mcp");
+    expect(controlSocket.sent.find((message) => message?.type === "set_config")).toMatchObject({
+      type: "set_config",
+      config: {
+        subAgentModel: "gpt-5.2-mini",
+        providerOptions: {
+          openai: {
+            reasoningEffort: "high",
+            reasoningSummary: "concise",
+            textVerbosity: "high",
+          },
+          "codex-cli": {
+            reasoningEffort: "low",
+            reasoningSummary: "auto",
+          },
+        },
+      },
+    });
 
     expect(idleThreadSocket.sent.map((message) => message?.type)).toEqual([
       "set_model",
       "set_config",
       "set_enable_mcp",
     ]);
+    expect(idleThreadSocket.sent.find((message) => message?.type === "set_config")).toMatchObject({
+      type: "set_config",
+      config: {
+        subAgentModel: "gpt-5.2-mini",
+        providerOptions: {
+          openai: {
+            reasoningEffort: "high",
+            reasoningSummary: "concise",
+            textVerbosity: "high",
+          },
+          "codex-cli": {
+            reasoningEffort: "low",
+            reasoningSummary: "auto",
+          },
+        },
+      },
+    });
     expect(busyThreadSocket.sent).toHaveLength(0);
 
     busyThreadSocket.emit({
@@ -405,5 +572,22 @@ describe("workspace settings sync", () => {
       "set_config",
       "set_enable_mcp",
     ]);
+    expect(busyThreadSocket.sent.find((message) => message?.type === "set_config")).toMatchObject({
+      type: "set_config",
+      config: {
+        subAgentModel: "gpt-5.2-mini",
+        providerOptions: {
+          openai: {
+            reasoningEffort: "high",
+            reasoningSummary: "concise",
+            textVerbosity: "high",
+          },
+          "codex-cli": {
+            reasoningEffort: "low",
+            reasoningSummary: "auto",
+          },
+        },
+      },
+    });
   });
 });

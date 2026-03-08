@@ -45,6 +45,7 @@ import {
   normalizeThreadTitleSource,
   truncateTitle,
 } from "../store.helpers";
+import { mergeWorkspaceProviderOptions } from "../openaiCompatibleProviderOptions";
 import type { ThreadRecord, WorkspaceRecord } from "../types";
 
 export function createWorkspaceDefaultsActions(set: StoreSet, get: StoreGet): Pick<AppStoreActions, "applyWorkspaceDefaultsToThread" | "updateWorkspaceDefaults"> {
@@ -73,6 +74,7 @@ export function createWorkspaceDefaultsActions(set: StoreSet, get: StoreGet): Pi
       const model = (ws.defaultModel?.trim() || rt.config?.model?.trim() || "") || undefined;
       const subAgentModel =
         (ws.defaultSubAgentModel?.trim() || ws.defaultModel?.trim() || rt.sessionConfig?.subAgentModel?.trim() || "") || undefined;
+      const providerOptions = ws.providerOptions;
   
       if (provider && model) {
         const ok = sendThread(get, threadId, (sessionId) => ({
@@ -84,19 +86,23 @@ export function createWorkspaceDefaultsActions(set: StoreSet, get: StoreGet): Pi
         if (ok) appendThreadTranscript(threadId, "client", { type: "set_model", sessionId: rt.sessionId, provider, model });
       }
 
-      if (subAgentModel) {
+      if (subAgentModel || providerOptions) {
         const okConfig = sendThread(get, threadId, (sessionId) => ({
           type: "set_config",
           sessionId,
           config: {
-            subAgentModel,
+            ...(subAgentModel ? { subAgentModel } : {}),
+            ...(providerOptions ? { providerOptions } : {}),
           },
-        }));
+        }) as any);
         if (okConfig) {
           appendThreadTranscript(threadId, "client", {
             type: "set_config",
             sessionId: rt.sessionId,
-            config: { subAgentModel },
+            config: {
+              ...(subAgentModel ? { subAgentModel } : {}),
+              ...(providerOptions ? { providerOptions } : {}),
+            },
           });
         }
       }
@@ -114,7 +120,18 @@ export function createWorkspaceDefaultsActions(set: StoreSet, get: StoreGet): Pi
 
     updateWorkspaceDefaults: async (workspaceId, patch) => {
       set((s) => ({
-        workspaces: s.workspaces.map((w) => (w.id === workspaceId ? { ...w, ...patch } : w)),
+        workspaces: s.workspaces.map((w) => {
+          if (w.id !== workspaceId) return w;
+          return {
+            ...w,
+            ...patch,
+            ...(patch.providerOptions !== undefined
+              ? {
+                  providerOptions: mergeWorkspaceProviderOptions(w.providerOptions, patch.providerOptions),
+                }
+              : {}),
+          };
+        }),
       }));
       await persistNow(get);
 
@@ -122,7 +139,8 @@ export function createWorkspaceDefaultsActions(set: StoreSet, get: StoreGet): Pi
         patch.defaultProvider !== undefined ||
         patch.defaultModel !== undefined ||
         patch.defaultSubAgentModel !== undefined ||
-        patch.defaultEnableMcp !== undefined;
+        patch.defaultEnableMcp !== undefined ||
+        patch.providerOptions !== undefined;
       if (!shouldSyncCoreSettings) {
         return;
       }
@@ -140,6 +158,7 @@ export function createWorkspaceDefaultsActions(set: StoreSet, get: StoreGet): Pi
       );
       const model = workspace.defaultModel?.trim() || defaultModelForProvider(provider);
       const subAgentModel = workspace.defaultSubAgentModel?.trim() || model;
+      const providerOptions = workspace.providerOptions;
 
       const modelPersisted = sendControl(get, workspaceId, (sessionId) => ({
         type: "set_model",
@@ -152,8 +171,9 @@ export function createWorkspaceDefaultsActions(set: StoreSet, get: StoreGet): Pi
         sessionId,
         config: {
           subAgentModel,
+          ...(providerOptions ? { providerOptions } : {}),
         },
-      }));
+      }) as any);
       const mcpPersisted = sendControl(get, workspaceId, (sessionId) => ({
         type: "set_enable_mcp",
         sessionId,
