@@ -1,3 +1,22 @@
+# Task: Merge remote desktop fixes and ship release 0.1.1
+
+## Plan
+- [x] Inspect `main` vs `origin/main`, merge the pending remote desktop fix commit, and resolve any conflicts without dropping the local auto-updater work.
+- [x] Bump the repo and desktop app versions to `0.1.1` and rerun the required validation/build checks.
+- [x] Commit the merged release state, push `main`, tag `0.1.1`, and publish the GitHub release marked “release 0.1.1 finally ready”.
+
+## Review
+- `main` was ahead/behind `origin/main` by one commit each. The pending remote desktop change was `e164e22 Debug desktop server errors`; it merged cleanly into the local auto-updater work as merge commit `82738b3 Merge remote-tracking branch 'origin/main'`, so there was no actual conflicted `MERGE_HEAD` to repair.
+- Bumped the release version to `0.1.1` in both `/Users/mweinbach/Projects/agent-coworker/package.json` and `/Users/mweinbach/Projects/agent-coworker/apps/desktop/package.json`.
+- Removed the updater UX’s hardcoded default app version by making `/Users/mweinbach/Projects/agent-coworker/apps/desktop/src/lib/desktopApi.ts` read the desktop package version, and updated the affected desktop tests to assert `0.1.1`.
+- Verification:
+  - `bun run typecheck` -> pass
+  - `bun test --cwd apps/desktop` -> pass (`162 pass, 0 fail`)
+  - `bun test` -> pass (`1746 pass, 2 skip, 0 fail`)
+  - `bun run desktop:build -- --publish never` -> pass; generated `apps/desktop/release/Cowork-0.1.1-mac-arm64.zip`, `apps/desktop/release/Cowork-0.1.1-mac-arm64.dmg`, blockmaps, and `apps/desktop/release/latest-mac.yml`
+  - `git diff --check` -> pass
+- The local packaged macOS build remains unsigned and unnotarized in this shell because Developer ID / notarization credentials were not exported locally; GitHub Actions is still responsible for the signed macOS and Windows release artifacts on the tag build.
+
 # Task: Ensure packaged desktop builds ship and launch the pinned bundled agent sidecar
 
 ## Plan

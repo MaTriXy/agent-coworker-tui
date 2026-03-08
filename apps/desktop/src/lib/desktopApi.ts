@@ -1,3 +1,5 @@
+import desktopPackage from "../../package.json";
+
 import type { PersistedState, TranscriptEvent } from "../app/types";
 
 export type StartWorkspaceServerInput = {
@@ -163,7 +165,9 @@ export type UpdaterState = {
   release: UpdaterReleaseInfo | null;
 };
 
-export function createDefaultUpdaterState(currentVersion = "0.1.0", packaged = false): UpdaterState {
+const desktopAppVersion = desktopPackage.version;
+
+export function createDefaultUpdaterState(currentVersion = desktopAppVersion, packaged = false): UpdaterState {
   return {
     phase: packaged ? "idle" : "disabled",
     packaged,
