@@ -1,28 +1,31 @@
-# Task: Ship desktop hotfix release 0.1.6
+# Task: Ship desktop hotfix release 0.1.7
 
 ## Plan
-- [x] Bump the repo and desktop release versions from `0.1.5` to `0.1.6`, keeping the Windows updater-signing workflow fix in the release payload.
-- [x] Restore desktop typecheck health if needed, rerun the release-focused validation stack, and confirm the packaged desktop artifacts reflect `0.1.6`.
+- [x] Bump the repo and desktop release versions from `0.1.6` to `0.1.7`, keeping the Windows updater-signing workflow fix in the release payload.
+- [x] Restore desktop typecheck health if needed, rerun the release-focused validation stack, and confirm the packaged desktop artifacts reflect `0.1.7`.
 - [x] Fix the GitHub Actions schema issue in the release workflow so Windows upload gating does not use disallowed `secrets.*` expressions in `if:` conditions.
 - [x] Fix the Windows CI packaging path so unsigned builds do not export empty `CSC_*` variables into `electron-builder`.
-- [ ] Commit the hotfix, tag `v0.1.6`, push to `origin/main`, and note any remaining release-management follow-up that cannot be completed from this machine.
+- [x] Fix the Windows CI packaging path so empty `WIN_CSC_*` values do not get treated as a real certificate path by `electron-builder`.
+- [ ] Commit the hotfix, tag `v0.1.7`, push to `origin/main`, and note any remaining release-management follow-up that cannot be completed from this machine.
 
 ## Review
 - Initial attempt: pushed `v0.1.4`, which exposed that GitHub Actions rejects `secrets.*` inside step-level `if:` expressions. That meant the tag existed but the desktop release workflow file was considered invalid and did not run successfully from that tag.
 - Fixed `.github/workflows/desktop-release.yml` to promote the Windows signing secrets into job-level env and gate the Windows signing/upload steps on `env.WIN_CSC_LINK` / `env.WIN_CSC_KEY_PASSWORD` instead of `secrets.*` inside `if:` expressions.
 - Second attempt: pushed `v0.1.5`, which got past workflow parsing but still failed the Windows build because the workflow explicitly exported empty `CSC_LINK` / `CSC_KEY_PASSWORD` variables when no Windows signing secret was configured. On Windows, that turns an otherwise unsigned build into a broken signing configuration for `electron-builder`.
-- Fixed the Windows build step so it only exports `CSC_LINK` / `CSC_KEY_PASSWORD` when both `WIN_CSC_*` secrets are present; otherwise it explicitly removes those variables and performs a normal unsigned smoke build.
-- Bumped `/Users/mweinbach/Projects/agent-coworker/package.json` and `/Users/mweinbach/Projects/agent-coworker/apps/desktop/package.json` to `0.1.6`, plus the desktop updater/UI tests that assert the visible version string.
+- Third attempt: pushed `v0.1.6`, which still failed the Windows build because `electron-builder` reads `WIN_CSC_LINK` directly before falling back to `CSC_LINK`, and GitHub Actions was still defining `WIN_CSC_LINK=""` / `WIN_CSC_KEY_PASSWORD=""` at the job level when those secrets were absent.
+- Reproduced that failure locally with `WIN_CSC_LINK=''` / `WIN_CSC_KEY_PASSWORD=''`, which made `electron-builder` abort with `Env WIN_CSC_LINK is not correct, cannot resolve: ... not a file`.
+- Fixed the Windows build step so it removes both `WIN_CSC_*` and `CSC_*` when the Windows signing secrets are absent, which forces `electron-builder` onto the unsigned packaging path instead of trying to import an empty certificate path.
+- Bumped `/Users/mweinbach/Projects/agent-coworker/package.json` and `/Users/mweinbach/Projects/agent-coworker/apps/desktop/package.json` to `0.1.7`, plus the desktop updater/UI tests that assert the visible version string.
 - Added `apps/desktop/src/electron-updater.d.ts` with the small subset of `electron-updater` types used by `apps/desktop/electron/services/updater.ts`, which restored `bun run typecheck` in this checkout without changing runtime behavior.
 - Verified the desktop release workflow hotfix still holds: macOS uses the Apple Developer ID `CSC_*` secrets, Windows uses only `WIN_CSC_*`, unsigned Windows builds do not upload release metadata, and the publish job now uploads exactly the assets that were downloaded.
 - Local packaging initially failed because a stale `cowork-server-x86_64-pc-windows-msvc.exe` process was running from `apps/desktop/resources/binaries` and locking the sidecar output directory. After stopping that stale sidecar process, `bun run desktop:build -- --publish never` completed successfully.
-- Local packaging produced `apps/desktop/release/Cowork-0.1.6-win-x64.exe`, `apps/desktop/release/Cowork-0.1.6-win-x64.exe.blockmap`, and refreshed `apps/desktop/release/latest.yml` with `version: 0.1.6`.
+- Local packaging produced `apps/desktop/release/Cowork-0.1.7-win-x64.exe`, `apps/desktop/release/Cowork-0.1.7-win-x64.exe.blockmap`, and refreshed `apps/desktop/release/latest.yml` with `version: 0.1.7`.
 - Verification:
   - `~/.bun/bin/bun test test/desktop-release.workflow.test.ts` -> pass (`2 pass, 0 fail`)
   - `~/.bun/bin/bun test --cwd apps/desktop` -> pass (`167 pass, 0 fail`)
   - `~/.bun/bin/bun run typecheck` -> pass
-  - `~/.bun/bin/bun run desktop:build -- --publish never` -> pass after stopping the stale packaged sidecar process
-  - `~/.bun/bin/bun test` -> still fails in pre-existing unrelated `test/tools.test.ts` cases (`webSearch` expectations and `memory` searches that cannot spawn `rg` in this environment)
+  - `WIN_CSC_LINK='' ; WIN_CSC_KEY_PASSWORD='' ; <workflow cleanup logic> ; ~/.bun/bin/bun run desktop:build -- --publish never` -> pass; produced the unsigned `0.1.7` Windows installer after removing both `WIN_CSC_*` and `CSC_*`
+  - `~/.bun/bin/bun test` -> still fails in pre-existing unrelated `test/tools.test.ts` cases (`webSearch` expectations and `memory` searches); current baseline is `1748 pass, 2 skip, 4 fail`
 
 # Task: Fix desktop Windows updater signing mismatch
 

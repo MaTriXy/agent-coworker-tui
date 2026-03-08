@@ -17,7 +17,7 @@ describe("desktop release workflow", () => {
       /- name: Build Windows desktop artifacts[\s\S]*?CSC_LINK: \$\{\{ secrets\.CSC_LINK \}\}/,
     );
     expect(workflow).toMatch(
-      /- name: Build Windows desktop artifacts[\s\S]*?Remove-Item Env:CSC_LINK -ErrorAction SilentlyContinue[\s\S]*?Remove-Item Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue/,
+      /- name: Build Windows desktop artifacts[\s\S]*?Remove-Item Env:WIN_CSC_LINK -ErrorAction SilentlyContinue[\s\S]*?Remove-Item Env:WIN_CSC_KEY_PASSWORD -ErrorAction SilentlyContinue[\s\S]*?Remove-Item Env:CSC_LINK -ErrorAction SilentlyContinue[\s\S]*?Remove-Item Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue/,
     );
   });
 
