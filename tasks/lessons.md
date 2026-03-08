@@ -23,3 +23,4 @@
 - When the user explicitly accepts unsigned Windows releases, prefer wiring GitHub Releases into the updater feed with explicit unsigned-update settings instead of forcing a signing-certificate setup they do not want.
 - When changing release workflow behavior that already has regression coverage, update the workflow tests in the same commit before tagging a release or CI will fail in `Validate` before packaging starts.
 - For provider/model support assertions in reviews, verify current official docs before claiming a setting is invalid; local SDK typings and bundled adapters may lag behind current OpenAI model support.
+- When a merge commit becomes the next release, do not repoint the prior release tag; bump the package version to the next patch and create a new `v0.1.x` tag for that commit instead.

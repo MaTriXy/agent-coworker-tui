@@ -1462,3 +1462,15 @@
   - `C:\Users\maxw6\.bun\bin\bun test test/repl.test.ts test/tui.slash-commands.test.ts` -> pass (`83 pass, 0 fail`)
   - `C:\Users\maxw6\.bun\bin\bun test test/repl.test.ts` -> pass (`74 pass, 0 fail`)
   - `C:\Users\maxw6\.bun\bin\bun run typecheck` -> pass
+
+# Task: Correct merge-release version to 0.1.13
+
+## Plan
+- [x] Inspect the current package version and local `v0.1.12` tag placement after the merge commit.
+- [x] Bump the repo and desktop package versions from `0.1.12` to `0.1.13`.
+- [x] Restore `v0.1.12` to the prior release commit, create `v0.1.13` at `HEAD`, and verify the tag layout.
+
+## Review
+- The merge commit at `HEAD` was newer than the existing `v0.1.12` release commit, so treating it as the same release would have overwritten the previous release marker instead of minting the next patch.
+- Updated `package.json` and `apps/desktop/package.json` from `0.1.12` to `0.1.13` so the repository version matches the intended next release number.
+- Restored `v0.1.12` to commit `92863a1` (`Fix desktop release validation in v0.1.12`) and reserved the current commit for the new `v0.1.13` release tag.
