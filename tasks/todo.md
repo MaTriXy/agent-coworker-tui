@@ -1,3 +1,21 @@
+# Task: Ship desktop release 0.1.3 from the current auth-fix main branch
+
+## Plan
+- [x] Bump the repo and desktop release versions to `0.1.3`, keeping the current `main` fixes from the other machine as the release base.
+- [x] Rerun the release validation stack (`typecheck`, desktop tests, full tests, packaged desktop build) against `0.1.3`.
+- [x] Push the release commit, tag `v0.1.3`, publish the release, and verify the resulting GitHub Actions run/assets.
+
+## Review
+- Release base: current `main` already included the latest auth fixes from the other machine, with `3da887a Fix codex authentication flow` at `HEAD` before the version bump.
+- Bumped `/Users/mweinbach/Projects/agent-coworker/package.json` and `/Users/mweinbach/Projects/agent-coworker/apps/desktop/package.json` to `0.1.3`, and updated the desktop tests that assert the visible updater version string.
+- Verification before tagging:
+  - `bun run typecheck` -> pass
+  - `bun test --cwd apps/desktop` -> pass (`167 pass, 0 fail`)
+  - `bun test` -> pass (`1750 pass, 2 skip, 0 fail`)
+  - `bun run desktop:build -- --publish never` -> pass; generated `apps/desktop/release/Cowork-0.1.3-mac-arm64.zip`, `apps/desktop/release/Cowork-0.1.3-mac-arm64.dmg`, blockmaps, and refreshed updater manifests
+  - `git diff --check` -> pass
+- `apps/desktop/release/latest-mac.yml` now targets `Cowork-0.1.3-mac-arm64.zip` with the new SHA512 metadata, so the packaged updater manifest is aligned with the release version.
+
 # Task: Fix Windows OAuth browser opener truncation
 
 ## Plan
