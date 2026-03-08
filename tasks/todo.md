@@ -3,8 +3,8 @@
 ## Plan
 - [x] Inspect the current repo/workflow state and confirm how a tag push becomes a GitHub desktop release.
 - [x] Run a local signed/notarized desktop build using the configured Apple/GitHub release credentials.
-- [ ] Commit the release-pipeline and icon changes needed for this test and push a tag that triggers the desktop release workflow.
-- [ ] Update the resulting GitHub release with an explicit note that this is a test build, then record the outcome below.
+- [x] Commit the release-pipeline and icon changes needed for this test and push a tag that triggers the desktop release workflow.
+- [x] Update the resulting GitHub release with an explicit note that this is a test build, then record the outcome below.
 
 ## Review
 - Verified the local macOS release path with the final GitHub signing inputs before cutting the tag:
@@ -14,7 +14,17 @@
   - `xcrun stapler validate apps/desktop/release/mac-arm64/Cowork.app` succeeded.
   - `spctl -a -vv --type exec apps/desktop/release/mac-arm64/Cowork.app` returned `accepted` with `source=Notarized Developer ID`.
 - The original no-icon release request was superseded before the final retry. The next release tag should include the refreshed desktop icon assets now present under `apps/desktop/build/`.
-- Pending: icon-inclusive tag push, GitHub Actions release run, and release-note update.
+- Final published test release: `desktop-v0.1.0-test-icon-20260308-2`
+  - Release URL: `https://github.com/mweinbach/agent-coworker/releases/tag/desktop-v0.1.0-test-icon-20260308-2`
+  - The published release note explicitly marks it as a test release with the updated icon.
+- GitHub validation for that final tag:
+  - `Validate` -> pass
+  - `Package (macOS)` -> pass, including Developer ID signing, notarization, stapling validation, and artifact upload
+  - `Package (Windows)` -> pass after removing the broken optional `WIN_CSC_LINK`/`WIN_CSC_KEY_PASSWORD` env injection so unsigned Windows packaging could proceed
+- Release publishing nuance:
+  - The publish job created the draft release and uploaded all primary assets, but it failed on a duplicate `builder-debug.yml` upload from both platform artifacts.
+  - Follow-up fix committed to `main`: the release workflow now publishes only `latest*.yml` metadata files, so future tag runs should not hit that duplicate-asset failure.
+  - After the assets were confirmed present, the draft release was published manually with the requested test note.
 
 # Task: Generate notarization secrets and add what is verifiably correct to GitHub
 
