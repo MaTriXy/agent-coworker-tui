@@ -125,7 +125,8 @@ jobs:
           chmod 600 "$key_path"
           echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
 
-      - name: Build desktop artifacts
+      - name: Build macOS desktop artifacts
+        if: ${{ runner.os == 'macOS' }}
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -134,6 +135,13 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: bun run desktop:build -- --publish never
+
+      - name: Build Windows desktop artifacts
+        if: ${{ runner.os == 'Windows' }}
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: bun run desktop:build -- --publish never
 
       - name: Verify macOS signing and notarization
@@ -160,16 +168,52 @@ jobs:
           xcrun stapler validate "$app_path"
           spctl -a -vv --type exec "$app_path"
 
-      - name: Upload desktop artifacts
+      - name: Verify Windows signing
+        if: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK != '' }}
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem apps/desktop/release/*.exe | Select-Object -First 1
+
+          if (-not $installer) {
+            throw "No packaged .exe installer found under apps/desktop/release"
+          }
+
+          $signature = Get-AuthenticodeSignature $installer.FullName
+          $signature | Format-List Status, StatusMessage, Path, SignerCertificate
+
+          if ($signature.Status -ne "Valid") {
+            throw "Expected a valid Authenticode signature on $($installer.FullName)"
+          }
+
+      - name: Skip unsigned Windows release upload
+        if: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK == '' }}
+        shell: pwsh
+        run: |
+          Write-Host "WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD not configured; Windows packaging smoke-tested only."
+          Write-Host "Skipping Windows release asset upload so auto-update metadata is never published for an unsigned build."
+
+      - name: Upload macOS desktop artifacts
+        if: ${{ runner.os == 'macOS' }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows desktop artifacts
+        if: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
             apps/desktop/release/*.exe
             apps/desktop/release/*.blockmap
-            apps/desktop/release/latest*.yml
+            apps/desktop/release/latest.yml
           if-no-files-found: error
           retention-days: 14
 
@@ -187,14 +231,34 @@ jobs:
           path: release-assets
           pattern: desktop-release-*
 
-      - name: Publish release assets
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
+      - name: Collect release asset list
+        id: collect-release-assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+
+          files=(
             release-assets/**/*.dmg
             release-assets/**/*.zip
             release-assets/**/*.exe
             release-assets/**/*.blockmap
             release-assets/**/latest*.yml
-          fail_on_unmatched_files: true
+          )
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No packaged release assets were downloaded." >&2
+            exit 1
+          fi
+
+          {
+            echo "files<<EOF"
+            printf '%s\n' "${files[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.collect-release-assets.outputs.files }}
           generate_release_notes: true

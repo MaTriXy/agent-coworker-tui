@@ -1,3 +1,23 @@
+# Task: Fix desktop Windows updater signing mismatch
+
+## Plan
+- [x] Trace why Windows auto-updates reject the published installer and confirm whether CI is signing Windows artifacts with the macOS Developer ID certificate.
+- [x] Patch the desktop release workflow/config so Windows packaging only uses Windows signing inputs, or stays unsigned when none are configured, instead of inheriting the Apple certificate.
+- [x] Add/update focused regression coverage, rerun the required verification commands, and record the outcome below.
+
+## Review
+- Root cause: `.github/workflows/desktop-release.yml` exported the generic `CSC_LINK` / `CSC_KEY_PASSWORD` secrets into the shared build step for both matrix entries. `electron-builder` falls back from `WIN_CSC_*` to those generic `CSC_*` variables on Windows, so the Windows NSIS installer picked up the Apple Developer ID `.p12` and shipped a signature chain that Windows does not trust. That exactly matches the updater error reporting `Developer ID Application: Max Weinbach (6UHAW5UAT4)` plus `A certificate chain could not be built to a trusted root authority`.
+- Fixed the workflow so macOS and Windows build in separate steps. The macOS step still uses `CSC_LINK` / `CSC_KEY_PASSWORD`; the Windows step now uses only `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD`.
+- Hardened release publishing so unsigned Windows builds are smoke-tested only. If `WIN_CSC_LINK` is absent, CI now skips uploading `latest.yml` and the Windows installer, which prevents future GitHub Releases from advertising broken Windows auto-update metadata.
+- Updated the publish job to assemble the exact downloaded asset list before calling `softprops/action-gh-release`, so tag releases still publish cleanly when the unsigned Windows upload path is intentionally skipped.
+- Added `test/desktop-release.workflow.test.ts` to lock the two critical invariants: Windows must never inherit `CSC_*`, and Windows release assets are only uploaded when Windows signing secrets exist.
+- Updated `apps/desktop/README.md` to document that Windows release assets are only published when `WIN_CSC_LINK` is configured, because Windows auto-update-compatible releases need a Windows-trusted signing certificate.
+- Verification:
+  - `~/.bun/bin/bun test test/desktop-release.workflow.test.ts` -> pass (`2 pass, 0 fail`)
+  - `git diff --check` -> pass aside from existing CRLF conversion warnings on Windows
+  - `~/.bun/bin/bun run typecheck` -> fails on a pre-existing `apps/desktop/electron/services/updater.ts` resolution error for `electron-updater`
+  - `~/.bun/bin/bun test` -> fails in unrelated existing `test/tools.test.ts` cases (`webSearch` live-behavior expectations and `memory` searches that cannot spawn `rg` in this environment)
+
 # Task: Ship desktop release 0.1.3 from the current auth-fix main branch
 
 ## Plan

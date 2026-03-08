@@ -88,8 +88,10 @@ Required for signed and notarized macOS releases:
 - either `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` for App Store Connect API-key notarization
 - or `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` for Apple ID notarization
 
-Optional release secrets:
+Windows release secrets:
 - `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` for Windows-only signing
+
+If `WIN_CSC_LINK` is not configured, the Windows CI job still smoke-builds the installer but skips uploading and publishing Windows release assets. That keeps unsigned or mis-signed Windows `latest.yml` metadata out of GitHub Releases, which would otherwise break Electron auto-updates on Windows.
 
 In GitHub Actions, store `APPLE_API_KEY` as the raw `.p8` file contents. The workflow writes it to a temporary file before packaging.
 The macOS job now fails before upload if those signing/notarization inputs are missing, and it validates the packaged `.app` with `codesign`, `stapler`, and `spctl`.
