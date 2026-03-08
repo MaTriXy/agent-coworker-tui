@@ -1,6 +1,31 @@
 {
   "version": 1,
   "skills": {
+    "asc-app-create-ui": {
+      "source": "rudrankriyam/app-store-connect-cli-skills",
+      "sourceType": "github",
+      "computedHash": "22ed3a39768343692274081caf7cdb9b4568ce246d35bbc8c2eaf0c9adbd2fbc"
+    },
+    "asc-cli-usage": {
+      "source": "rudrankriyam/app-store-connect-cli-skills",
+      "sourceType": "github",
+      "computedHash": "2d511c34eef026279880310f2afb734e693df3f95ccf46a36f8bcaa1c0b8b3f2"
+    },
+    "asc-id-resolver": {
+      "source": "rudrankriyam/app-store-connect-cli-skills",
+      "sourceType": "github",
+      "computedHash": "6289c851dded0fb1599dfab3934d0664d9f7c4e4dbacd585ee8c07161e3bb5fc"
+    },
+    "asc-notarization": {
+      "source": "rudrankriyam/app-store-connect-cli-skills",
+      "sourceType": "github",
+      "computedHash": "5a352a16af1bc65d8edb39ee676f39a0388df43ef896a44d8f0a111be7568b06"
+    },
+    "asc-signing-setup": {
+      "source": "rudrankriyam/app-store-connect-cli-skills",
+      "sourceType": "github",
+      "computedHash": "c8e14e07a120c98c96253648320850bfd8a52453967b2477ff20bc51904aaa95"
+    },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",
