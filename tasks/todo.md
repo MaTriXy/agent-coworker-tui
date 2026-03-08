@@ -1,3 +1,81 @@
+# Task: Cut a test desktop release without the final icon
+
+## Plan
+- [x] Inspect the current repo/workflow state and confirm how a tag push becomes a GitHub desktop release.
+- [x] Run a local signed/notarized desktop build using the configured Apple/GitHub release credentials.
+- [ ] Commit the release-pipeline changes needed for this test and push a tag that triggers the desktop release workflow.
+- [ ] Update the resulting GitHub release with an explicit note that this is a test build with no final icon, then record the outcome below.
+
+## Review
+- Verified the local macOS release path with the final GitHub signing inputs before cutting the tag:
+  - `bun run desktop:build` completed successfully with `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` exported from the same assets stored in GitHub Actions.
+  - The build produced `apps/desktop/release/mac-arm64/Cowork.app`, `Cowork-0.1.0-mac-arm64.dmg`, `Cowork-0.1.0-mac-arm64.zip`, and the matching blockmaps/update manifest.
+  - `codesign -dvvv apps/desktop/release/mac-arm64/Cowork.app` showed `Developer ID Application: Max Weinbach (6UHAW5UAT4)`, a secure timestamp, `Identifier=com.cowork.desktop`, and a stapled notarization ticket.
+  - `xcrun stapler validate apps/desktop/release/mac-arm64/Cowork.app` succeeded.
+  - `spctl -a -vv --type exec apps/desktop/release/mac-arm64/Cowork.app` returned `accepted` with `source=Notarized Developer ID`.
+- Pending: tag push, GitHub Actions release run, and release-note update.
+
+# Task: Generate notarization secrets and add what is verifiably correct to GitHub
+
+## Plan
+- [x] Verify local `asc` and `gh` auth, inspect current Apple signing/notarization assets, and determine what can be generated from this machine.
+- [x] Attempt to generate a fresh local Developer ID Application signing export suitable for `CSC_LINK` / `CSC_KEY_PASSWORD`.
+- [x] Add the confirmed GitHub Actions secrets and record any remaining Apple-side blocker needed for full notarization.
+- [x] Run targeted verification of the resulting GitHub secret state and document the outcome below.
+
+## Review
+- Verified local auth state first:
+  - `gh auth status` is healthy for `github.com` with repo/workflow scopes.
+  - `asc auth status` is healthy via the `AgentCoworker` keychain profile (`keyId=LZP39NWX42`).
+  - Existing Apple account state includes a `DEVELOPER_ID_APPLICATION_G2` certificate in App Store Connect, but this machine had `0 valid identities` in the local keychain, so it could not sign with that existing cert.
+- Recovered enough local Apple metadata to preload some GitHub Actions secrets:
+  - Added `APPLE_API_KEY` from `/Users/mweinbach/Keys/AuthKey_LZP39NWX42.p8`.
+  - Added `APPLE_API_KEY_ID=LZP39NWX42`.
+  - Added `APPLE_TEAM_ID=6UHAW5UAT4` (derived from the existing Apple Developer certificate subject).
+- Completed the local signing identity export once the user supplied the issued Apple certificate:
+  - Generated `/Users/mweinbach/Keys/Cowork-DeveloperID-2026-03-08.csr` and `/Users/mweinbach/Keys/Cowork-DeveloperID-2026-03-08.key`.
+  - Verified the downloaded `/Users/mweinbach/Keys/developerID_application.cer` matches that private key.
+  - Exported `/Users/mweinbach/Keys/Cowork-DeveloperID-2026-03-08.p12` and saved the export password at `/Users/mweinbach/Keys/Cowork-DeveloperID-2026-03-08.p12.password.txt` with `0600` permissions.
+  - Added `CSC_LINK` (base64-encoded `.p12` contents) and `CSC_KEY_PASSWORD` to GitHub Actions secrets.
+- Completed the notarization-auth fallback path using Apple ID credentials:
+  - Added `APPLE_ID` and `APPLE_APP_SPECIFIC_PASSWORD` to GitHub Actions secrets.
+  - With `APPLE_TEAM_ID` already present, the workflow now has a complete Apple ID notarization credential set even though `APPLE_API_ISSUER` is still unset.
+- Apple-side limitation is now informational rather than blocking:
+  - A direct `asc certificates create --certificate-type DEVELOPER_ID_APPLICATION` attempt still failed with `This operation can only be performed by the Account Holder`, so cert creation remains Account Holder-only. The manual Apple portal flow worked once the user completed it.
+- There are no remaining GitHub-secret blockers for the macOS signing/notarization workflow. `APPLE_API_ISSUER` is still unset, but it is no longer required because the Apple ID notarization path is fully configured.
+
+### Verification
+- `gh secret list --app actions --json name,updatedAt,visibility` confirms:
+  - `APPLE_API_KEY`
+  - `APPLE_API_KEY_ID`
+  - `APPLE_ID`
+  - `APPLE_APP_SPECIFIC_PASSWORD`
+  - `APPLE_TEAM_ID`
+  - `CSC_LINK`
+  - `CSC_KEY_PASSWORD`
+- Local export artifacts exist and are readable only by the current user:
+  - `/Users/mweinbach/Keys/Cowork-DeveloperID-2026-03-08.p12`
+  - `/Users/mweinbach/Keys/Cowork-DeveloperID-2026-03-08.p12.password.txt`
+
+# Task: Enforce macOS signing and notarization in GitHub desktop releases
+
+## Plan
+- [x] Inspect the existing desktop release workflow, packaging config, and notarization hook to confirm how macOS releases are currently signed.
+- [x] Harden the GitHub Actions macOS packaging job so release builds fail fast when Developer ID signing or notarization secrets are missing.
+- [x] Run verification, then record the exact Apple/GitHub requirements and repo changes in the review section below.
+
+## Review
+- Updated `/Users/mweinbach/Projects/agent-coworker/.github/workflows/desktop-release.yml` so the macOS packaging job now fails early when the required Developer ID signing secrets (`CSC_LINK`, `CSC_KEY_PASSWORD`) or notarization credentials are missing. It accepts either the App Store Connect API-key trio (`APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`) or the Apple ID trio (`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`).
+- Removed the unconditional `CSC_IDENTITY_AUTO_DISCOVERY=false` release env override. That setting prevented electron-builder from finding the imported Developer ID identity from `CSC_LINK`, which meant macOS CI could silently skip code signing even when the certificate was present.
+- Added a macOS post-build verification step that locates the packaged `.app` and validates it with `codesign`, `xcrun stapler validate`, and `spctl`, so the workflow now fails before artifact upload if the release app is not properly Developer ID signed and stapled.
+- Updated `/Users/mweinbach/Projects/agent-coworker/apps/desktop/README.md` to document the actual required GitHub secrets for signed/notarized macOS releases and the new CI enforcement behavior.
+
+### Verification
+- `python3` YAML parse of `.github/workflows/desktop-release.yml` -> pass
+- `git diff --check` -> pass
+- `bun run typecheck` -> pass
+- `bun test` -> pass (`1730 pass, 2 skip, 0 fail`)
+
 # Task: Move desktop Exa Search API settings into their own section
 
 ## Plan
@@ -842,7 +920,7 @@
 - Kept release publishing in GitHub Actions instead of relying on `electron-builder` auto-publish behavior. That makes the workflow easier to reason about, avoids double-publish surprises, and limits release write permissions to a single publish job.
 - Added a macOS CI helper step that turns the `APPLE_API_KEY` secret into a temporary `.p8` file on the runner, so the release workflow supports both Apple ID notarization (`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`) and App Store Connect API-key notarization (`APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`).
 - Updated `apps/desktop/scripts/notarize.cjs` so desktop packaging now accepts either notarization credential set instead of only the Apple ID flow.
-- Updated `apps/desktop/README.md` with the new release workflow triggers, artifact behavior, and optional signing/notarization secrets. The docs also note that CI stores `APPLE_API_KEY` as raw `.p8` contents and sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so unsigned builds still package cleanly when signing certificates are not configured.
+- Updated `apps/desktop/README.md` with the new release workflow triggers, artifact behavior, and optional signing/notarization secrets. The docs note that CI stores `APPLE_API_KEY` as raw `.p8` contents and that macOS release jobs now fail early if signing or notarization inputs are missing.
 
 ### Verification
 - `bun run docs:check` -> pass

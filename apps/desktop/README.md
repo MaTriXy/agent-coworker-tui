@@ -68,7 +68,7 @@ bun run build
 The build pipeline rebuilds bundled desktop resources (`cowork-server` sidecar + prompts/config/docs) via the root `build:desktop-resources` script. Curated default skills are bootstrapped by the shared agent runtime into `~/.cowork/skills` from GitHub instead of being bundled into the app.
 
 For macOS notarization, you can use either `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`, or `APPLE_API_KEY`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`.
-Without a complete notarization credential set, packaging continues but notarization is skipped.
+Local packaging still skips notarization when that credential set is incomplete.
 
 ## Release CI
 
@@ -81,12 +81,13 @@ Each run:
 - uploads the generated installers as workflow artifacts
 - publishes those installers to the matching GitHub Release when the workflow is running on a tag ref
 
+Required for signed and notarized macOS releases:
+- `CSC_LINK`, `CSC_KEY_PASSWORD` for the Developer ID Application certificate (`.p12`)
+- either `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` for App Store Connect API-key notarization
+- or `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` for Apple ID notarization
+
 Optional release secrets:
-- `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` for Apple ID notarization
-- `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` for App Store Connect API-key notarization
-- `CSC_LINK`, `CSC_KEY_PASSWORD` for shared code-signing certificates
 - `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` for Windows-only signing
 
 In GitHub Actions, store `APPLE_API_KEY` as the raw `.p8` file contents. The workflow writes it to a temporary file before packaging.
-The workflow also sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so unsigned CI builds still succeed when signing certificates are not configured yet.
-
+The macOS job now fails before upload if those signing/notarization inputs are missing, and it validates the packaged `.app` with `codesign`, `stapler`, and `spctl`.

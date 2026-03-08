@@ -63,6 +63,51 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Validate macOS signing and notarization inputs
+        if: ${{ runner.os == 'macOS' }}
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+
+          if [ -z "${CSC_LINK:-}" ]; then
+            missing+=("CSC_LINK (Developer ID Application certificate .p12)")
+          fi
+
+          if [ -z "${CSC_KEY_PASSWORD:-}" ]; then
+            missing+=("CSC_KEY_PASSWORD (Developer ID Application certificate password)")
+          fi
+
+          has_api_key_creds=false
+          if [ -n "${APPLE_API_KEY_CONTENT:-}" ] && [ -n "${APPLE_API_KEY_ID:-}" ] && [ -n "${APPLE_API_ISSUER:-}" ]; then
+            has_api_key_creds=true
+          fi
+
+          has_apple_id_creds=false
+          if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+            has_apple_id_creds=true
+          fi
+
+          if [ "$has_api_key_creds" = false ] && [ "$has_apple_id_creds" = false ]; then
+            missing+=("either the ASC API key set (APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER) or the Apple ID set (APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID)")
+          fi
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required macOS release secrets:\n' >&2
+            printf ' - %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
+
       - name: Prepare Apple API key
         if: ${{ runner.os == 'macOS' }}
         shell: bash
@@ -82,7 +127,6 @@ jobs:
 
       - name: Build desktop artifacts
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -93,6 +137,30 @@ jobs:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: bun run desktop:build
+
+      - name: Verify macOS signing and notarization
+        if: ${{ runner.os == 'macOS' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_path="$(find apps/desktop/release -type d -name '*.app' -print -quit)"
+
+          if [ -z "$app_path" ]; then
+            echo "No packaged .app bundle found under apps/desktop/release" >&2
+            exit 1
+          fi
+
+          codesign_output="$(codesign -dvvv "$app_path" 2>&1)"
+          printf '%s\n' "$codesign_output"
+
+          if ! printf '%s\n' "$codesign_output" | grep -q "Developer ID Application"; then
+            echo "Expected a Developer ID Application signature on $app_path" >&2
+            exit 1
+          fi
+
+          xcrun stapler validate "$app_path"
+          spctl -a -vv --type exec "$app_path"
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
@@ -132,4 +200,3 @@ jobs:
             release-assets/**/*.yml
           fail_on_unmatched_files: true
           generate_release_notes: true
-
