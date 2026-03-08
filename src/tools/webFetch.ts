@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { Readability } from "@mozilla/readability";
-import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
 
 import type { ToolContext } from "./context";
@@ -18,9 +16,17 @@ const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   "image/webp",
   "image/gif",
 ]);
+let readabilityDepsPromise: Promise<{
+  Readability: typeof import("@mozilla/readability").Readability;
+  JSDOM: typeof import("jsdom").JSDOM;
+}> | null = null;
 
 function isRedirectStatus(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+function isDesktopBundleRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.COWORK_DESKTOP_BUNDLE === "1";
 }
 
 function normalizeMimeType(contentType: string | null): string | null {
@@ -134,8 +140,45 @@ async function fetchWithSafeRedirects(url: string, abortSignal?: AbortSignal): P
   throw new Error(`Too many redirects while fetching URL: ${url}`);
 }
 
+async function loadReadabilityDeps(): Promise<{
+  Readability: typeof import("@mozilla/readability").Readability;
+  JSDOM: typeof import("jsdom").JSDOM;
+}> {
+  if (!readabilityDepsPromise) {
+    readabilityDepsPromise = Promise.all([import("@mozilla/readability"), import("jsdom")]).then(
+      ([readabilityMod, jsdomMod]) => ({
+        Readability: readabilityMod.Readability,
+        JSDOM: jsdomMod.JSDOM,
+      })
+    );
+  }
+
+  return readabilityDepsPromise;
+}
+
+async function htmlToMarkdown(html: string, finalUrl: string, ctx: ToolContext): Promise<string> {
+  const turndown = new TurndownService();
+
+  // Bun-compiled desktop sidecars cannot reliably load jsdom's stylesheet asset at
+  // startup, so skip the readability pass there and degrade to direct HTML->Markdown.
+  if (isDesktopBundleRuntime()) {
+    return turndown.turndown(html);
+  }
+
+  try {
+    const { Readability, JSDOM } = await loadReadabilityDeps();
+    const dom = new JSDOM(html, { url: finalUrl });
+    const article = new Readability(dom.window.document).parse();
+    return article?.content ? turndown.turndown(article.content) : turndown.turndown(html);
+  } catch (error) {
+    ctx.log(`tool! webFetch readability fallback ${JSON.stringify({ reason: String(error) })}`);
+    return turndown.turndown(html);
+  }
+}
+
 export const __internal = {
   getResponseTimeoutMs: () => responseTimeoutMs,
+  isDesktopBundleRuntime,
   setResponseTimeoutMs: (ms: number) => {
     responseTimeoutMs = ms;
   },
@@ -178,13 +221,7 @@ export function createWebFetchTool(ctx: ToolContext) {
       }
 
       const html = await res.text();
-      const dom = new JSDOM(html, { url: finalUrl });
-      const article = new Readability(dom.window.document).parse();
-
-      const turndown = new TurndownService();
-      const md = article?.content
-        ? turndown.turndown(article.content)
-        : turndown.turndown(html);
+      const md = await htmlToMarkdown(html, finalUrl, ctx);
 
       const out = truncateText(md, maxLength);
       ctx.log(`tool< webFetch ${JSON.stringify({ chars: out.length })}`);

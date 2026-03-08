@@ -1297,6 +1297,37 @@ describe("webFetch tool", () => {
     }
   });
 
+  test("uses direct HTML conversion in desktop bundle mode", async () => {
+    const dir = await tmpDir();
+    const previousDesktopBundle = process.env.COWORK_DESKTOP_BUNDLE;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(async () => {
+      return new Response("<html><body><main><h1>Bundle Title</h1><p>Bundle body</p></main></body></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
+    }) as any;
+
+    process.env.COWORK_DESKTOP_BUNDLE = "1";
+
+    try {
+      expect(webFetchInternal.isDesktopBundleRuntime()).toBe(true);
+
+      const t: any = createWebFetchTool(makeCtx(dir));
+      const out: string = await t.execute({ url: "https://example.com", maxLength: 50000 });
+      expect(out).toContain("Bundle Title");
+      expect(out).toContain("Bundle body");
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousDesktopBundle === undefined) {
+        delete process.env.COWORK_DESKTOP_BUNDLE;
+      } else {
+        process.env.COWORK_DESKTOP_BUNDLE = previousDesktopBundle;
+      }
+    }
+  });
+
   test("handles fetch errors", async () => {
     const dir = await tmpDir();
 

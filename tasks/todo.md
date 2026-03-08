@@ -1307,3 +1307,41 @@
 - `bun test --cwd apps/desktop` -> pass (`146 pass, 0 fail`)
 - `CSC_IDENTITY_AUTO_DISCOVERY=false bun run desktop:build` -> pass when rerun outside the sandbox; produced `apps/desktop/release/Cowork-0.1.0-win-x64.exe`, `.blockmap`, and `latest.yml`
 - `git -c safe.directory=C:/Users/maxw6/Projects/agent-coworker diff --check` -> pass
+
+# Task: Fix packaged desktop workspace-server startup on Windows installs
+
+## Plan
+- [x] Inspect the Electron workspace-server startup path and collect local machine evidence from the packaged desktop logs.
+- [x] Identify why the packaged `cowork-server` sidecar exits before emitting `server_listening` on this machine.
+- [x] Patch the startup path, add regression coverage, rebuild the sidecar, and verify the packaged spawn contract.
+
+## Review
+- Confirmed the user-facing `"desktop:startWorkspaceServer"` error was coming from the packaged sidecar child process in [serverManager.ts](/C:/Users/maxw6/Projects/agent-coworker/apps/desktop/electron/services/serverManager.ts), not from IPC itself. The decisive local evidence was [server.log](C:/Users/maxw6/AppData/Roaming/Cowork/logs/server.log), which showed repeated `ENOENT` crashes for `jsdom` trying to open `D:\a\agent-coworker\agent-coworker\node_modules\jsdom\lib\jsdom\browser\default-stylesheet.css` before startup.
+- Updated [webFetch.ts](/C:/Users/maxw6/Projects/agent-coworker/src/tools/webFetch.ts) so `jsdom` and `@mozilla/readability` are loaded lazily instead of at module import time, and so the desktop bundled sidecar (`COWORK_DESKTOP_BUNDLE=1`) skips the readability pass and falls back to direct HTML-to-Markdown conversion. That prevents the packaged server from crashing during startup just because `webFetch` exists in the tool registry.
+- Added regression coverage in [tools.test.ts](/C:/Users/maxw6/Projects/agent-coworker/test/tools.test.ts) for the desktop-bundle fallback path, rebuilt the desktop resources, and verified the rebuilt sidecar emits a real `server_listening` JSON event when launched with the same env the desktop app uses.
+
+### Verification
+- `C:\Users\maxw6\.bun\bin\bun.exe test test\tools.test.ts --test-name-pattern "webFetch tool"` -> pass (`15 pass, 0 fail`)
+- `C:\Users\maxw6\.bun\bin\bun.exe run typecheck` -> pass
+- `C:\Users\maxw6\.bun\bin\bun.exe test test\tools.test.ts` -> unrelated existing failures on this machine (`webSearch` env leakage and `memory` tool failing to spawn `rg` due local permission issues); the new `webFetch` coverage passed
+- `C:\Users\maxw6\.bun\bin\bun.exe run build:desktop-resources` -> pass
+- Rebuilt sidecar launch with `COWORK_BUILTIN_DIR=C:\Users\maxw6\Projects\agent-coworker\dist` and `COWORK_DESKTOP_BUNDLE=1` -> emitted `{"type":"server_listening","url":"ws://127.0.0.1:53108/ws","port":53108,"cwd":"C:\\Users\\maxw6\\Desktop\\Cowork"}`
+
+# Task: Cut desktop release 0.1.10 with the packaged sidecar startup fix
+
+## Plan
+- [x] Confirm the next release version/tag and check whether the update pipeline can publish the fixed Windows build.
+- [x] Bump the repo and desktop package versions, rebuild the packaged Windows artifact, and verify the packaged sidecar itself starts cleanly.
+- [x] Commit, tag, and push the release to GitHub.
+
+## Review
+- Bumped [package.json](/C:/Users/maxw6/Projects/agent-coworker/package.json) and [apps/desktop/package.json](/C:/Users/maxw6/Projects/agent-coworker/apps/desktop/package.json) from `0.1.9` to `0.1.10` so the Git tag, packaged app version, and updater-visible version all line up.
+- Verified the release artifact itself, not just the repo-built sidecar: [release/win-unpacked/resources/binaries/cowork-server-x86_64-pc-windows-msvc.exe](/C:/Users/maxw6/Projects/agent-coworker/apps/desktop/release/win-unpacked/resources/binaries/cowork-server-x86_64-pc-windows-msvc.exe) now emits `server_listening` when launched with the packaged [resources/dist](/C:/Users/maxw6/Projects/agent-coworker/apps/desktop/release/win-unpacked/resources/dist) bundle. That is the concrete proof that installing `0.1.10` fixes the startup failure seen on this machine.
+- Checked GitHub repo secrets before release. The repository has macOS signing/notarization secrets but does not currently have `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD`, so GitHub Actions can publish the Windows installer for `0.1.10` but will intentionally skip Windows `latest.yml` / `.blockmap` auto-update metadata. That means Windows users can install the fixed `0.1.10` build manually from GitHub Releases, but in-app auto-update will remain unavailable until those Windows signing secrets are configured.
+
+### Verification
+- `C:\Users\maxw6\.bun\bin\bun.exe test test\tools.test.ts --test-name-pattern "webFetch tool"` -> pass (`15 pass, 0 fail`)
+- `C:\Users\maxw6\.bun\bin\bun.exe run typecheck` -> pass
+- `C:\Users\maxw6\.bun\bin\bun.exe test --cwd apps\desktop` -> pass (`171 pass, 0 fail`)
+- `CSC_IDENTITY_AUTO_DISCOVERY=false C:\Users\maxw6\.bun\bin\bun.exe run desktop:build -- --publish never` -> pass; produced `apps/desktop/release/Cowork-0.1.10-win-x64.exe`, `.blockmap`, updated `latest.yml`, and refreshed `win-unpacked`
+- Packaged sidecar launch with `COWORK_BUILTIN_DIR=C:\Users\maxw6\Projects\agent-coworker\apps\desktop\release\win-unpacked\resources\dist` and `COWORK_DESKTOP_BUNDLE=1` -> emitted `{"type":"server_listening","url":"ws://127.0.0.1:62693/ws","port":62693,"cwd":"C:\\Users\\maxw6\\Desktop\\Cowork"}`
