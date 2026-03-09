@@ -32,7 +32,7 @@ The project goal is release-readiness and behavioral safety for the existing pro
 | Session orchestration | `src/server/session.ts` |
 | Protocol contract | `src/server/protocol.ts` + `docs/websocket-protocol.md` |
 | Clients | OpenTUI React client (`src/tui/index.tsx`), CLI REPL (`src/cli/repl.ts`) |
-| Providers | `google`, `openai`, `anthropic`, `codex-cli`, `claude-code` |
+| Providers | `google`, `openai`, `anthropic`, `codex-cli` |
 | MCP | Runtime-discovered and namespaced via `src/mcp/index.ts` |
 | Observability/Harness | `src/observability/*`, `src/harness/contextStore.ts`, `docs/harness/index.md` |
 | Continuity | Session backup/checkpoints in `src/server/sessionBackup.ts` |
@@ -44,7 +44,7 @@ The project goal is release-readiness and behavioral safety for the existing pro
 | Websocket server + per-connection session lifecycle | `implemented` | `startServer` creates `AgentSession`, emits `server_hello`, settings, observability status. |
 | Thin TUI/CLI consuming server protocol | `implemented` | UI logic is protocol-driven; server holds business logic. |
 | Desktop client consuming server protocol | `implemented` | Desktop store + UI consume the same `ServerEvent`/`ClientMessage` contract. |
-| Provider runtime switching (`connect_provider`, `set_model`) | `implemented` | Works across API-key and CLI OAuth provider modes. |
+| Provider runtime switching (`connect_provider`, `set_model`) | `implemented` | Works across API-key and Codex CLI OAuth provider modes. |
 | MCP lifecycle + namespacing + enable/disable at runtime | `implemented with divergence` | More complete than original PRD baseline; includes dynamic lifecycle controls. |
 | Observability + harness query/evaluation surface | `implemented with divergence` | Added after original baseline; now part of public API surface. |
 | Session backup/checkpoint/restore/delete | `implemented with divergence` | Not in initial baseline; now integrated into core session behavior. |
@@ -113,7 +113,7 @@ agent-coworker/
 
 Model/provider behavior is runtime-configurable and no longer tied to static boot-time examples.
 
-- Provider set: `google`, `openai`, `anthropic`, `codex-cli`, `claude-code`.
+- Provider set: `google`, `openai`, `anthropic`, `codex-cli`.
 - Default models are defined in `src/providers/catalog.ts` and resolved per provider.
 - Config resolution is layered (`config/defaults.json` → `~/.agent/config.json` → `<cwd>/.agent/config.json` → env overrides).
 - Runtime switches:

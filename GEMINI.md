@@ -23,7 +23,7 @@
 
 ### Prerequisites
 *   [Bun](https://bun.sh/) installed on your system.
-*   API keys for desired providers (Google Gemini, OpenAI, or Anthropic) or login via community CLIs (`gemini`, `codex`, `claude`).
+*   API keys for desired providers (Google Gemini API, OpenAI API, or Anthropic API).
 
 ### Key Commands
 *   **Install:** `bun install`

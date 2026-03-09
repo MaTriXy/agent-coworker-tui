@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isProviderName, PROVIDER_NAMES } from "../src/types";
+import { isProviderName, PROVIDER_NAMES, resolveProviderName } from "../src/types";
 
 // ---------------------------------------------------------------------------
 // PROVIDER_NAMES
@@ -14,6 +14,20 @@ describe("PROVIDER_NAMES", () => {
     expect(PROVIDER_NAMES).toContain("openai");
     expect(PROVIDER_NAMES).toContain("anthropic");
     expect(PROVIDER_NAMES).toContain("codex-cli");
+  });
+});
+
+describe("resolveProviderName", () => {
+  test("returns exact provider names", () => {
+    expect(resolveProviderName("google")).toBe("google");
+    expect(resolveProviderName("openai")).toBe("openai");
+    expect(resolveProviderName("anthropic")).toBe("anthropic");
+    expect(resolveProviderName("codex-cli")).toBe("codex-cli");
+  });
+
+  test("returns null for unknown provider names", () => {
+    expect(resolveProviderName("legacy-google-cli")).toBeNull();
+    expect(resolveProviderName("legacy-anthropic-cli")).toBeNull();
   });
 });
 

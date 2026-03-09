@@ -71,8 +71,6 @@ function ProviderDialog(props: { onDismiss: () => void; initialProvider?: string
         { id: "oauth_device", type: "oauth", label: "ChatGPT (device code)", oauthMode: "auto" },
         { id: "oauth_cli", type: "oauth", label: "ChatGPT (browser)", oauthMode: "auto" }
       );
-    } else if (selected === "claude-code") {
-      base.unshift({ id: "oauth_cli", type: "oauth", label: "OAuth (CLI)", oauthMode: "auto" });
     }
     return base;
   };

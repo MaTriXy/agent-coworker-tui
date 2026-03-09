@@ -290,7 +290,7 @@ describe("desktop protocol v2 mapping", () => {
     controlSocket.emit({
       type: "provider_auth_result",
       sessionId: "control-session",
-      provider: "claude-code",
+      provider: "codex-cli",
       methodId: "oauth_cli",
       ok: true,
       mode: "oauth_pending",
@@ -298,7 +298,7 @@ describe("desktop protocol v2 mapping", () => {
     });
 
     const notification = useAppStore.getState().notifications.at(-1);
-    expect(notification?.title).toBe("Provider auth pending: claude-code");
+    expect(notification?.title).toBe("Provider auth pending: codex-cli");
     expect(notification?.detail).toBe("Complete sign-in in terminal.");
   });
 

@@ -286,6 +286,21 @@
   - `~/.bun/bin/bun test test/server.test.ts` inside the sandbox -> still fails early with `EADDRINUSE` during local port binding, before behavior assertions
   - `~/.bun/bin/bun run typecheck` -> blocked by missing desktop/Electron modules in this workspace (`Cannot find module 'electron'`, `zustand`, `lucide-react`, etc.), unrelated to these runtime/server changes
 
+# Task: Audit provider references down to Anthropic API and Gemini API only
+
+## Plan
+- [x] Search the repo for legacy Anthropic/Google CLI-provider references using subagents plus local verification, and categorize runtime, docs, prompt, and test hits.
+- [x] Rewrite or remove those references so Anthropic-related surfaces point only to the Anthropic API and Google-related surfaces point only to the Gemini API, while preserving valid provider/model identifiers and API-backed docs.
+- [x] Run verification searches and the relevant Bun tests, then record the validated outcome and any explicit exceptions below.
+
+## Review
+- Removed the legacy `claude-code` and `gemini-cli` compatibility references from runtime-facing code and UI/test fixtures: `src/types.ts` no longer normalizes those aliases, the TUI provider dialog no longer contains a hidden `claude-code` OAuth branch, and the desktop notification regression now uses `codex-cli`.
+- Removed the Claude Code GitHub workflow entirely and rewrote public docs and repo notes to describe Anthropic access only via `ANTHROPIC_API_KEY` and Google access only via the Gemini API. This included `README.md`, `CONTRIBUTING.md`, `GEMINI.md`, `Cowork_Agent_PRD.md`, `docs/architecture.md`, `CLAUDE.md`, `.gitignore`, and the bundled shadcn MCP doc.
+- Verification:
+  - `rg -n -i --hidden --glob '!node_modules' --glob '!.git' --glob '!dist' "claude code|claude-code|claude agent sdk|claude-agent-sdk|@anthropic-ai/claude-agent-sdk|gemini-cli|gemini cli" .` -> no matches
+  - `~/.bun/bin/bun test test/types.test.ts apps/desktop/test/protocol-v2-events.test.ts test/providers/codex-oauth-flows.test.ts` -> pass (`62 pass, 0 fail`)
+  - `~/.bun/bin/bun test` -> still has an existing nondeterministic failure in `test/providers/codex-oauth-flows.test.ts` when run inside the full-suite parallel load, even though that same file passes in isolation
+
 # Task: Ship desktop release 0.1.9 with robust updater behavior and Windows installer publishing
 
 ## Plan

@@ -120,7 +120,6 @@ Model provider integrations with unified interface:
 | OpenAI | API Key | `gpt-5.2` |
 | Anthropic | API Key | `claude-4-6-sonnet` |
 | Codex CLI | OAuth, API Key | (uses OpenAI) |
-| Claude Code | OAuth, API Key | (uses Anthropic) |
 
 Each provider exports:
 - `defaultModel` — Model ID to use

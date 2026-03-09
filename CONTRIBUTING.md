@@ -11,7 +11,7 @@ This guide covers everything you need to start contributing to the project.
   - **Google** (`GOOGLE_GENERATIVE_AI_API_KEY`) -- default provider
   - **OpenAI** (`OPENAI_API_KEY`)
   - **Anthropic** (`ANTHROPIC_API_KEY`)
-  - Or an OAuth-capable CLI like `codex` or `claude`
+  - Optional: Codex CLI OAuth if you want an OpenAI-backed CLI login flow
 
 ## Getting Started
 
@@ -235,5 +235,5 @@ Key testing patterns:
 
 - [`docs/websocket-protocol.md`](docs/websocket-protocol.md) -- WebSocket message format and flow
 - [`docs/session-storage-architecture.md`](docs/session-storage-architecture.md) -- Session persistence design
-- [`CLAUDE.md`](CLAUDE.md) -- AI coding assistant instructions and architecture notes
+- [`CLAUDE.md`](CLAUDE.md) -- Repository assistant notes and architecture context
 - [`apps/TUI/docs/opentui.md`](apps/TUI/docs/opentui.md) -- OpenTUI framework documentation

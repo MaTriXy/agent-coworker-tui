@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides repository context for coding agents working with this repository.
 
 ## What This Is
 
@@ -40,7 +40,7 @@ There is no linter or formatter configured. TypeScript strict mode is the primar
 
 ### Provider System
 
-`src/providers/index.ts` — Registry of `ProviderDefinition` objects. Each provider (`google`, `openai`, `anthropic`, `codex-cli`, `claude-code`) exports `defaultModel`, `keyCandidates`, and `createModel()`. Provider selection flows through config with env var override (`AGENT_PROVIDER`).
+`src/providers/index.ts` — Registry of `ProviderDefinition` objects. Each provider (`google`, `openai`, `anthropic`, `codex-cli`) exports `defaultModel`, `keyCandidates`, and `createModel()`. Provider selection flows through config with env var override (`AGENT_PROVIDER`).
 
 ### Tool System
 

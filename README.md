@@ -23,7 +23,7 @@ It's built on a **WebSocket-first architecture**, which means the agent brain is
 Most AI coding tools are either cloud-locked, single-interface, or treat the terminal as an afterthought. agent-coworker is:
 
 - **Local-first** — your code never leaves your machine unless you want it to
-- **Provider-agnostic** — swap between Gemini, GPT, Claude, or community CLI providers
+- **Provider-agnostic** — swap between the Google Gemini API, OpenAI API, Anthropic API, or Codex CLI
 - **Interface-agnostic** — same agent, same tools, whether you're in the TUI, a desktop app, or a custom client
 - **Extensible** — skills, MCP servers, and sub-agents let you teach it anything
 
@@ -44,14 +44,12 @@ Set an API key for your provider of choice:
 | OpenAI | `OPENAI_API_KEY` |
 | Anthropic | `ANTHROPIC_API_KEY` |
 
-Or use OAuth via community CLI providers:
+Or use Codex CLI OAuth:
 
 ```bash
 # OpenAI via Codex CLI
 npx @openai/codex login
 
-# Anthropic via Claude Code
-npx @anthropic-ai/claude-code login
 ```
 
 Then run it:
@@ -187,7 +185,7 @@ Three-tier hierarchy: **built-in defaults** < **user config** < **project config
 
 | Env Variable | Purpose |
 |---|---|
-| `AGENT_PROVIDER` | `google` · `openai` · `anthropic` · `codex-cli` · `claude-code` |
+| `AGENT_PROVIDER` | `google` · `openai` · `anthropic` · `codex-cli` |
 | `AGENT_MODEL` | Model ID |
 | `AGENT_WORKING_DIR` | Working directory for the agent |
 | `AGENT_USER_NAME` | Your name (used in system prompt) |
@@ -216,8 +214,8 @@ Built-in [Langfuse](https://langfuse.com) + OpenTelemetry integration. Set `LANG
 │  createRunTurn() · System Prompt · Tool Execution       │
 └────────┬─────────────────┬──────────────────┬───────────┘
          │                 │                  │
-    Built-in Tools    Provider Registry    MCP Tools
-    (16 tools)        (Gemini/GPT/Claude)  (runtime-loaded)
+    Built-in Tools    Provider Registry                MCP Tools
+    (16 tools)        (Gemini API/OpenAI/Anthropic)   (runtime-loaded)
 ```
 
 Everything flows through the WebSocket protocol. UIs never touch the runtime engine or tools directly.
@@ -230,7 +228,7 @@ Everything flows through the WebSocket protocol. UIs never touch the runtime eng
 | `src/server/session.ts` | Session state, turn execution, ask/approval flows |
 | `src/server/protocol.ts` | WebSocket message types (`ClientMessage`, `ServerEvent`) |
 | `src/tools/` | All 16 built-in tool implementations |
-| `src/providers/` | Provider registry (Google, OpenAI, Anthropic, community CLIs) |
+| `src/providers/` | Provider registry (Google Gemini API, OpenAI API, Anthropic API, Codex CLI) |
 | `src/mcp/` | MCP config loading, OAuth, auth storage |
 | `apps/TUI/` | Terminal UI (OpenTUI + Solid.js) |
 | `apps/desktop/` | Electron desktop app |
