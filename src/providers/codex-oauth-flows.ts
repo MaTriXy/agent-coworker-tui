@@ -61,6 +61,9 @@ function generateOauthState(): string {
 }
 
 export function buildCodexAuthorizeUrl(redirectUri: string, challenge: string, state: string): string {
+  // DO NOT TOUCH THIS CONTRACT.
+  // These params must stay aligned with the upstream Codex CLI flow:
+  // same client ID, scope, originator, and localhost redirect behavior.
   const params = new URLSearchParams({
     response_type: "code",
     client_id: CODEX_OAUTH_CLIENT_ID,
@@ -180,6 +183,9 @@ export async function prepareCodexBrowserOAuth(): Promise<CodexBrowserOAuthPendi
     settle({ code });
   });
 
+  // DO NOT TOUCH THIS CONTRACT.
+  // The browser-facing redirect must remain http://localhost:{port}/auth/callback
+  // to match the reference Codex auth implementation exactly.
   const redirectUri = `http://${OAUTH_LOOPBACK_HOST}:${listener.port}/auth/callback`;
   const authUrl = buildCodexAuthorizeUrl(redirectUri, codeChallenge, state);
 
