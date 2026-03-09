@@ -1,5 +1,6 @@
 import type { AgentConfig } from "../types";
 import type { ModelMessage } from "../types";
+import type { OpenAiContinuationState } from "../shared/openaiContinuation";
 
 export type RuntimeUsage = {
   promptTokens: number;
@@ -31,9 +32,11 @@ export interface RuntimeRunTurnParams {
   config: AgentConfig;
   system: string;
   messages: ModelMessage[];
+  allMessages?: ModelMessage[];
   tools: RuntimeToolMap;
   maxSteps: number;
   providerOptions?: Record<string, any>;
+  providerState?: OpenAiContinuationState | null;
   abortSignal?: AbortSignal;
   includeRawChunks?: boolean;
   telemetry?: unknown;
@@ -49,6 +52,7 @@ export interface RuntimeRunTurnResult {
   reasoningText?: string;
   responseMessages: ModelMessage[];
   usage?: RuntimeUsage;
+  providerState?: OpenAiContinuationState;
 }
 
 import type { RuntimeName } from "../types";

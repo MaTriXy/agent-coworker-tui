@@ -1,3 +1,121 @@
+# Task: Expose Codex OAuth status and rate limits in provider status
+
+## Plan
+- [x] Inspect the Codex app Rust sources and current Cowork provider-status/UI code to capture the exact usage endpoint fields worth surfacing.
+- [x] Extend the shared `ProviderStatus` shape and Codex verification path to include parsed backend status/rate-limit data without changing editable `providerOptions`.
+- [x] Update the desktop Providers page and focused tests, rerun the relevant verification commands, and record the outcome below.
+
+## Review
+- The Codex app/client sources confirmed the backend contract we should mirror: `GET /wham/usage` returns `plan_type`, a primary `rate_limit`, optional `code_review_rate_limit`, `additional_rate_limits`, and `credits`. Cowork now preserves that shape in a typed `usage` block on `ProviderStatus` instead of trying to overload editable `providerOptions`.
+- `src/providerStatus.ts` now parses the live Codex usage payload into `usage.planType`, `usage.accountId`, and normalized rate-limit snapshots with `allowed`, `limitReached`, `primaryWindow`, `secondaryWindow`, and `credits`. The same status call still drives verification, so the extra data comes from the exact endpoint already proving the OAuth session is valid.
+- `apps/desktop/src/ui/settings/pages/ProvidersPage.tsx` now renders a `Usage status` section for Codex with plan, account id, backend status message, and per-limit cards. Per your correction, windows are shown as remaining headroom (`96% left`, `100% left`) rather than consumed budget (`4% used`, `0% used`).
+- `src/cli/repl.ts` now prints the Codex plan and the primary rate-limit headroom on `/connect` status output, so the new data is visible outside the desktop UI too.
+- Focused verification passed:
+  - `~/.bun/bin/bun test test/providerStatus.test.ts test/providers/codex-auth.test.ts test/runtime.pi-runtime.test.ts apps/desktop/test/providers-page.test.ts` -> pass (`30 pass, 0 fail`)
+  - `~/.bun/bin/bunx tsc --noEmit` -> pass
+- Live verification passed against the current signed-in Codex session:
+  - `getProviderStatuses()` now returns `usage.accountId`, `usage.planType: "pro"`, and live `rateLimits` entries for `codex`, `code_review`, and `codex_bengalfox`
+  - the live payload shape matched the real backend fields from `https://chatgpt.com/backend-api/wham/usage`
+
+# Task: Align Codex OAuth verification with the Codex app contract
+
+## Plan
+- [x] Compare Cowork's current Codex OAuth verification path against the Codex app/client sources to identify where our status check diverges from the real backend contract.
+- [x] Patch `providerStatus` to verify Codex OAuth using the same backend/account-id shape as the Codex app instead of generic OIDC userinfo discovery.
+- [x] Rerun the focused provider/auth/runtime tests plus a live signed-in status/runtime check and record the outcome below.
+
+## Review
+- Root cause: Cowork was treating Codex OAuth verification like a generic OIDC login and probing `/.well-known/openid-configuration` + `userinfo`. Your real signed-in token worked for runtime calls, but that status check returned a false-negative `404`, so the UI showed Codex as unverified even though the transport was healthy.
+- The Codex app sources (`/Users/mweinbach/Downloads/server.rs` and `/Users/mweinbach/Downloads/client.rs`) use a different contract: they persist `chatgpt_account_id` from token claims and talk to the ChatGPT/Codex backend with the `ChatGPT-Account-Id` header. Cowork now matches that in `src/providerStatus.ts` by verifying against `https://chatgpt.com/backend-api/wham/usage` with the bearer token plus account-id header and by keeping account/email data token-derived.
+- Focused verification passed: `~/.bun/bin/bun test test/providerStatus.test.ts test/providers/codex-auth.test.ts test/runtime.pi-runtime.test.ts` (`24 pass, 0 fail`) and `~/.bun/bin/bunx tsc --noEmit`.
+- Live verification passed after the patch:
+  - `getProviderStatuses()` now returns `codex-cli` as `authorized: true`, `verified: true`, `mode: "oauth"`, message `Verified via Codex usage endpoint (pro).`
+  - the signed-in live runtime still succeeds for both a plain prompt (`OK`) and a forced tool loop (`PONG`) through `createRuntime({ runtime: "pi" }).runTurn(...)`
+
+# Task: Audit live Codex auth storage handling
+
+## Plan
+- [x] Inspect the active Codex auth loader path and determine which Cowork home it reads from.
+- [x] Check the live default/common Cowork auth stores on this machine for a Codex auth document without exposing token values.
+- [x] Run focused auth/runtime/status tests to verify parsing, refresh, and no-legacy-fallback behavior, then record the result below.
+
+## Review
+- The live loader path is `/Users/mweinbach/.cowork/auth/codex-cli/auth.json` by default, via `getAiCoworkerPaths()` and `readCodexAuthMaterial(..., { migrateLegacy: false })` in `src/connect.ts`, `src/runtime/piRuntime.ts`, and `src/providers/codex-auth.ts`.
+- After signing in, a direct live call to `readCodexAuthMaterial()` on the default path returned valid Cowork-managed auth metadata from `~/.cowork/auth/codex-cli/auth.json` (account, email, plan type, expiry all parsed cleanly without consulting legacy paths).
+- Live entry-point verification now succeeds through our own logic. `getProviderStatuses()` reports `codex-cli` as authorized in `oauth` mode, but still `verified: false` because the OIDC userinfo verification call returns `404`. Despite that verification warning, a real `createRuntime({ runtime: "pi" }).runTurn(...)` call for `codex-cli` succeeded for both a plain prompt (`OK`) and a forced tool-loop prompt (`PONG`) using the same Cowork auth file.
+- Focused verification passed: `~/.bun/bin/bun test test/providers/codex-auth.test.ts test/runtime.pi-runtime.test.ts test/providerStatus.test.ts` (`24 pass, 0 fail`). This covers JWT/claim parsing, refresh persistence, malformed auth handling, provider status, and the explicit rule that missing Cowork auth must not fall back to legacy `~/.codex`.
+- Conclusion: the live default Cowork auth path is now good, and the Codex runtime transport is working end to end. The remaining issue is narrower: provider verification still shows a false-negative warning because the userinfo check is returning `404` even though the actual Codex runtime calls succeed.
+
+# Task: Fix Codex ChatGPT tool-loop continuation without previous_response_id
+
+## Plan
+- [x] Reproduce the live `No tool call found for function call output with call_id ...` failure against the raw Responses runtime and isolate whether the bug is in `call_id` handling or step continuation state.
+- [x] Patch the OpenAI/Codex Responses runtime so only provider-managed continuation modes send bare tool-result deltas; the ChatGPT-backed Codex path must replay the assistant tool call plus tool results locally on the next step.
+- [x] Add focused regression coverage for the non-`previous_response_id` Codex tool loop, rerun the targeted runtime tests, and record the verified outcome below.
+
+## Review
+- Root cause: the raw Responses runtime treated every OpenAI/Codex tool loop like the OpenAI API-key continuation path. After disabling `previous_response_id` for the ChatGPT-backed Codex transport, step 2 still sent only `function_call_output` items, so the backend had no matching prior `function_call` in context and rejected the request with `400 No tool call found for function call output with call_id ...`.
+- Fixed `src/runtime/openaiResponsesRuntime.ts` so provider-managed continuation modes still send tool-result deltas only, while non-managed modes append the assistant tool call plus tool results into the local turn transcript before the next step. That restores the context the ChatGPT-backed Codex backend requires without regressing the OpenAI API-key path.
+- Added a focused regression in `test/runtime.openai-responses-runtime.test.ts` that proves the second Codex ChatGPT tool-loop step replays `[user, assistant, toolResult]` with no `previous_response_id`, matching the backend contract.
+- Verification:
+  - `~/.bun/bin/bun test test/runtime.openai-responses-runtime.test.ts` -> pass (`9 pass, 0 fail`)
+  - `~/.bun/bin/bunx tsc --noEmit` -> pass
+  - `~/.bun/bin/bun test test/runtime.pi-runtime.test.ts test/session.test.ts` -> pass (`192 pass, 0 fail`)
+
+# Task: Fix Codex auth reuse, add logout, and eliminate legacy token migration
+
+## Plan
+- [ ] Remove automatic `~/.codex/auth.json` migration from the Codex connect, provider-status, runtime, and model-adapter paths so Cowork only uses its own `~/.cowork/auth/codex-cli/auth.json`.
+- [ ] Add a first-class Codex provider logout flow through the auth registry, WebSocket protocol/session handling, and desktop provider settings UI.
+- [ ] Update the focused regression tests for auth migration/logout behavior, rerun the provider/session/desktop verification slices, and record the validated outcome below.
+
+## Review
+
+# Task: Own Codex OAuth in Cowork and add explicit Codex logout
+
+## Plan
+- [x] Remove automatic `~/.codex` auth migration and switch Codex browser sign-in back to the in-repo Cowork-owned OAuth flow.
+- [x] Tighten `codex-cli` credential resolution so runtime/model selection does not silently fall back to saved OpenAI API keys when the user expects Codex OAuth ownership.
+- [x] Add a first-class Codex logout path through the WebSocket protocol, server session auth manager, and desktop Providers settings UI.
+- [x] Update docs and focused regression coverage, then rerun the relevant auth/runtime/desktop verification commands and record the outcome below.
+
+## Review
+- Codex browser sign-in now matches the current official Codex CLI authorize flow in `src/providers/codex-oauth-flows.ts`: it uses `http://localhost:<port>/auth/callback`, the full connector-aware scope string, and the official `originator=codex_cli_rs` instead of the previous app-specific authorize parameters that were producing the browser-side `unknown_error`.
+- The Codex runtime path in `src/runtime/openaiNativeResponses.ts` now only rewrites the base URL for the ChatGPT-backed Codex transport. API-key-backed `codex-cli` requests keep the normal OpenAI base URL instead of being incorrectly sent to `.../v1/codex/responses`, and the ChatGPT-backed path now adds the official Codex `originator` header.
+- Desktop provider settings now only show `Log out` for real Codex OAuth sessions (`mode === "oauth"`), and `ProvidersPage` uses the current Zustand snapshot during SSR so the connected/logout state renders correctly in the server-rendered desktop tests.
+- Added focused regression coverage in `test/providers/codex-oauth-flows.test.ts` plus runtime/auth/desktop updates in `test/runtime.openai-responses-runtime.test.ts`, `test/connect.test.ts`, and `apps/desktop/test/providers-page.test.ts`.
+- Verification:
+  - `~/.bun/bin/bunx tsc --noEmit` -> pass
+  - `~/.bun/bin/bun test test/providers/codex-oauth-flows.test.ts test/connect.test.ts test/providers/auth-registry.test.ts test/runtime.openai-responses-runtime.test.ts apps/desktop/test/providers-page.test.ts apps/desktop/test/protocol-v2-events.test.ts` -> pass (`58 pass, 0 fail`)
+  - `~/.bun/bin/bun test test/providers/codex-auth.test.ts test/providers/saved-keys.test.ts test/providerStatus.test.ts` -> pass (`21 pass, 0 fail`)
+
+# Task: Raw Responses runtime for OpenAI/Codex plus durable subagent sessions
+
+## Plan
+- [x] Split runtime execution so `openai` and `codex-cli` use a first-class raw Responses runtime with in-repo adapters, while `google` and `anthropic` stay on PI.
+- [x] Extend session persistence and server/session wiring to support durable child subagent sessions with their own continuation state, metadata, and restart recovery.
+- [x] Add persistent subagent tool and WebSocket lifecycle surfaces, update protocol/docs, and verify runtime/session/tool/protocol behavior with focused tests plus repo checks.
+
+## Review
+- Added a dedicated internal OpenAI/Codex Responses runtime in `src/runtime/openaiResponsesRuntime.ts` and kept `createRuntime()` publicly pinned to `runtime: "pi"` while dispatching `openai` / `codex-cli` through the raw Responses path and leaving `google` / `anthropic` on PI.
+- Removed the PI deep-import bridge from the OpenAI/Codex execution path. The runtime now owns request shaping, tool/message conversion, streaming normalization, `previous_response_id` continuation, and provider-state return values in-repo.
+- Tightened the raw Responses request contract around the locally installed OpenAI SDK surface by keeping `previous_response_id`, `truncation: "auto"`, and `store: true`, and dropping the unsupported `context_management` payload.
+- Follow-up provider fix: the OpenAI API now receives function tools with `strict: false` so optional parameters like `read.offset` remain valid. The ChatGPT-backed Codex transport omits unsupported `previous_response_id`, `truncation`, and `max_output_tokens`, forces `store: false`, and clamps `text.verbosity` to `medium`, while the API-key-backed Codex/OpenAI Responses path still honors low|medium|high verbosity plus continuation fields.
+- Extended persistence to snapshot `v3` with `sessionKind`, `parentSessionId`, `agentType`, and `providerState`, and wired the same metadata through the session DB schema, legacy import path, runtime hydration, and JSON snapshot reader/writer.
+- Durable persistent subagents now flow through normal `AgentSession` instances with their own transcript/provider state, parent-child metadata, reopen-on-new-input behavior, root-delete cascade, and root-only listing semantics.
+- Added persistent subagent tools (`spawnPersistentAgent`, `listPersistentAgents`, `sendAgentInput`, `waitForAgent`, `closeAgent`) without changing the one-shot `spawnAgent` contract, and passed those controls only into root-session turns.
+- Added WebSocket support for `subagent_create` / `subagent_sessions_get`, matching `subagent_created` / `subagent_sessions` events, and child-session identity metadata on `server_hello` / `session_info`. Updated `docs/websocket-protocol.md` accordingly.
+- Verification:
+  - `~/.bun/bin/bunx tsc --noEmit` -> pass
+  - `~/.bun/bin/bun test test/runtime.pi-options.test.ts test/runtime.pi-runtime.test.ts test/runtime.openai-responses-runtime.test.ts test/runtime.selection.test.ts test/session.test.ts test/protocol.test.ts test/agentSocket.parse.test.ts test/session-store.test.ts test/session-db.test.ts test/session-db-mappers.test.ts test/persistentAgents.tool.test.ts` -> pass (`377 pass, 0 fail`)
+  - `~/.bun/bin/bun test test/runtime.openai-responses-runtime.test.ts test/runtime.pi-runtime.test.ts test/session.test.ts` -> pass after the OpenAI/Codex follow-up fix (`195 pass, 0 fail`)
+  - `~/.bun/bin/bun test test/spawnAgent.tool.test.ts test/persistentAgents.tool.test.ts` -> pass (`10 pass, 0 fail`)
+  - `~/.bun/bin/bun test test/spawnAgent.tool.test.ts test/persistentAgents.tool.test.ts test/server.test.ts --max-concurrency 1 --test-name-pattern "spawnAgent tool|persistent agent tools|subagent_create|subagent_sessions_get|research children use model|deleting a root session removes its persistent subagent resume target|child model changes stay session-local"` -> pass (`14 pass, 0 fail`)
+  - `~/.bun/bin/bun test test/server.test.ts --max-concurrency 1 --test-name-pattern "subagent_create|subagent_sessions_get|research children use model|deleting a root session removes its persistent subagent resume target|child model changes stay session-local"` -> pass when rerun outside the sandbox (`4 pass, 0 fail`)
+  - `~/.bun/bin/bun test` -> core/server/runtime paths pass, but the full suite still stops on pre-existing desktop dependency gaps in this workspace (`react-dom/server`, `lucide-react`, `zustand`, etc.); final result was `1717 pass, 2 skip, 13 fail`
+  - `~/.bun/bin/bun test test/server.test.ts` inside the sandbox -> still fails early with `EADDRINUSE` during local port binding, before behavior assertions
+  - `~/.bun/bin/bun run typecheck` -> blocked by missing desktop/Electron modules in this workspace (`Cannot find module 'electron'`, `zustand`, `lucide-react`, etc.), unrelated to these runtime/server changes
+
 # Task: Ship desktop release 0.1.9 with robust updater behavior and Windows installer publishing
 
 ## Plan

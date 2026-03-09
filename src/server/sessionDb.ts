@@ -2,6 +2,8 @@ import { Database } from "bun:sqlite";
 import path from "node:path";
 
 import type { AiCoworkerPaths } from "../connect";
+import type { PersistentSubagentSummary, SessionKind, SubagentAgentType } from "../shared/persistentSubagents";
+import type { OpenAiContinuationState } from "../shared/openaiContinuation";
 import type { AgentConfig, HarnessContextState, ModelMessage, TodoItem } from "../types";
 import type { PersistedSessionSummary } from "./sessionStore";
 import type { SessionTitleSource } from "./sessionTitleService";
@@ -19,6 +21,9 @@ export type SessionPersistenceStatus = "active" | "closed";
 
 export type PersistedSessionRecord = {
   sessionId: string;
+  sessionKind: SessionKind;
+  parentSessionId: string | null;
+  agentType: SubagentAgentType | null;
   title: string;
   titleSource: SessionTitleSource;
   titleModel: string | null;
@@ -37,6 +42,7 @@ export type PersistedSessionRecord = {
   lastEventSeq: number;
   systemPrompt: string;
   messages: ModelMessage[];
+  providerState: OpenAiContinuationState | null;
   todos: TodoItem[];
   harnessContext: HarnessContextState | null;
 };
@@ -48,6 +54,9 @@ export type PersistedSessionMutation = {
   direction?: "client" | "server" | "system";
   payload?: unknown;
   snapshot: {
+    sessionKind: SessionKind;
+    parentSessionId: string | null;
+    agentType: SubagentAgentType | null;
     title: string;
     titleSource: SessionTitleSource;
     titleModel: string | null;
@@ -64,6 +73,7 @@ export type PersistedSessionMutation = {
     hasPendingApproval: boolean;
     systemPrompt: string;
     messages: ModelMessage[];
+    providerState: OpenAiContinuationState | null;
     todos: TodoItem[];
     harnessContext: HarnessContextState | null;
   };
@@ -142,6 +152,10 @@ export class SessionDb {
 
   listSessions(): PersistedSessionSummary[] {
     return this.repository.listSessions();
+  }
+
+  listSubagentSessions(parentSessionId: string): PersistentSubagentSummary[] {
+    return this.repository.listSubagentSessions(parentSessionId);
   }
 
   deleteSession(sessionId: string): void {

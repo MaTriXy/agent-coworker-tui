@@ -1,5 +1,9 @@
 # Lessons
 
+- When surfacing provider rate limits in the UI, present remaining capacity (`100% left`) instead of consumed budget (`0% used`); that matches how users reason about available headroom.
+- For Codex OAuth verification, mirror the Codex app contract: trust the Cowork token claims for account/email/plan context and verify backend access with `ChatGPT-Account-Id` against the ChatGPT/Codex usage endpoint, not generic OIDC `userinfo`.
+- When the user asks to “test the API with our logic,” run the real provider-status/runtime entry points against the current auth home; a storage/parser audit alone does not answer whether the live transport can actually make a request.
+- For raw Responses tool loops, only send bare `function_call_output` deltas when the provider actually supports server-side continuation; ChatGPT-backed Codex steps must replay the assistant tool call plus tool results locally or the backend will reject the output `call_id`.
 - Scope websocket `try/catch` blocks to decode/parse only; never wrap consumer event callbacks in the same catch path.
 - Keep fallback stream IDs lifecycle-stable: do not seed with per-chunk indices, and align id-less `tool_input_*` and `tool_*` call/result IDs to the same fallback call key.
 - For live production-loop validation, avoid over-constraining tool-call order unless the ordering itself is the behavior under test; assert required tool usage, not first-call sequencing.
@@ -24,3 +28,8 @@
 - When changing release workflow behavior that already has regression coverage, update the workflow tests in the same commit before tagging a release or CI will fail in `Validate` before packaging starts.
 - For provider/model support assertions in reviews, verify current official docs before claiming a setting is invalid; local SDK typings and bundled adapters may lag behind current OpenAI model support.
 - When a merge commit becomes the next release, do not repoint the prior release tag; bump the package version to the next patch and create a new `v0.1.x` tag for that commit instead.
+- When a user reframes a provider implementation into an architecture question, answer the exact refactor scope and coupling points directly instead of only defending the current pragmatic path.
+- When refactoring provider runtimes, carry both one-shot and durable subagent flows through the design up front and verify them separately; it is easy to preserve the main turn path while quietly regressing child-session behavior.
+- When a bug report spans both Codex and OpenAI “Responses-like” paths, identify the exact transport behind each screenshot first; the ChatGPT-backed Codex endpoint and the OpenAI Responses API accept different request fields and require different fixes.
+- Do not generalize a Codex transport workaround across all Codex modes: the ChatGPT-backed Codex backend may need field clamps, while the API-key-backed Codex/OpenAI Responses path should keep full user-facing options like low|medium|high verbosity.
+- When replacing Codex OAuth with an in-repo flow, mirror the official authorize contract exactly: use the official scopes, `originator`, and `http://localhost` redirect URI instead of inventing app-specific values.

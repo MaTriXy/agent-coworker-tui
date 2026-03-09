@@ -5,7 +5,13 @@ import { listenOnLocalhost, OAUTH_FAILURE_HTML, OAUTH_LOOPBACK_HOST, OAUTH_SUCCE
 import type { AiCoworkerPaths, ConnectService } from "../store/connections";
 import type { UrlOpener } from "../utils/browser";
 import { openExternalUrl } from "../utils/browser";
-import { CODEX_OAUTH_CLIENT_ID, CODEX_OAUTH_ISSUER, persistCodexAuthFromTokenResponse } from "./codex-auth";
+import {
+  CODEX_OAUTH_CLIENT_ID,
+  CODEX_OAUTH_ISSUER,
+  CODEX_OAUTH_ORIGINATOR,
+  CODEX_OAUTH_SCOPE,
+  persistCodexAuthFromTokenResponse,
+} from "./codex-auth";
 
 const finiteNumberFromUnknownSchema = z.preprocess((value) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -54,18 +60,18 @@ function generateOauthState(): string {
   return toBase64Url(randomBytes(32));
 }
 
-function buildCodexAuthorizeUrl(redirectUri: string, challenge: string, state: string): string {
+export function buildCodexAuthorizeUrl(redirectUri: string, challenge: string, state: string): string {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: CODEX_OAUTH_CLIENT_ID,
     redirect_uri: redirectUri,
-    scope: "openid profile email offline_access",
+    scope: CODEX_OAUTH_SCOPE,
     code_challenge: challenge,
     code_challenge_method: "S256",
     id_token_add_organizations: "true",
     codex_cli_simplified_flow: "true",
     state,
-    originator: "agent-coworker",
+    originator: CODEX_OAUTH_ORIGINATOR,
   });
   return `${CODEX_OAUTH_ISSUER}/oauth/authorize?${params.toString()}`;
 }
@@ -171,7 +177,7 @@ export async function runCodexBrowserOAuth(opts: {
     settle({ code });
   });
 
-  const redirectUri = `http://${OAUTH_LOOPBACK_HOST}:${listener.port}/auth/callback`;
+  const redirectUri = `http://localhost:${listener.port}/auth/callback`;
   const authUrl = buildCodexAuthorizeUrl(redirectUri, codeChallenge, state);
 
   opts.onLine?.("[auth] opening browser for Codex login");

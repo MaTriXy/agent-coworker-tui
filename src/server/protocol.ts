@@ -17,6 +17,7 @@ import type { ProviderCatalogEntry } from "../providers/connectionCatalog";
 import type { ModelStreamPartType } from "./modelStream";
 import type { PersistedSessionSummary } from "./sessionStore";
 import type { SessionBackupPublicState } from "./sessionBackup";
+import type { PersistentSubagentSummary, SessionKind, SubagentAgentType } from "../shared/persistentSubagents";
 export { ASK_SKIP_TOKEN } from "../shared/ask";
 
 export type MCPServerEventSource = "workspace" | "user" | "system" | "workspace_legacy" | "user_legacy";
@@ -48,6 +49,7 @@ export type ClientMessage =
   | { type: "provider_catalog_get"; sessionId: string }
   | { type: "provider_auth_methods_get"; sessionId: string }
   | { type: "provider_auth_authorize"; sessionId: string; provider: AgentConfig["provider"]; methodId: string }
+  | { type: "provider_auth_logout"; sessionId: string; provider: AgentConfig["provider"] }
   | {
       type: "provider_auth_callback";
       sessionId: string;
@@ -99,6 +101,8 @@ export type ClientMessage =
   | { type: "set_session_title"; sessionId: string; title: string }
   | { type: "list_sessions"; sessionId: string }
   | { type: "delete_session"; sessionId: string; targetSessionId: string }
+  | { type: "subagent_create"; sessionId: string; agentType: SubagentAgentType; task: string }
+  | { type: "subagent_sessions_get"; sessionId: string }
   | {
       type: "set_config";
       sessionId: string;
@@ -121,6 +125,9 @@ export type ServerEvent =
       messageCount?: number;
       hasPendingAsk?: boolean;
       hasPendingApproval?: boolean;
+      sessionKind?: SessionKind;
+      parentSessionId?: string;
+      agentType?: SubagentAgentType;
     }
   | { type: "session_settings"; sessionId: string; enableMcp: boolean }
   | {
@@ -133,6 +140,9 @@ export type ServerEvent =
       updatedAt: string;
       provider: AgentConfig["provider"];
       model: string;
+      sessionKind?: SessionKind;
+      parentSessionId?: string;
+      agentType?: SubagentAgentType;
     }
   | {
       type: "mcp_servers";
@@ -292,6 +302,8 @@ export type ServerEvent =
       limit: number;
     }
   | { type: "sessions"; sessionId: string; sessions: PersistedSessionSummary[] }
+  | { type: "subagent_created"; sessionId: string; subagent: PersistentSubagentSummary }
+  | { type: "subagent_sessions"; sessionId: string; subagents: PersistentSubagentSummary[] }
   | { type: "session_deleted"; sessionId: string; targetSessionId: string }
   | {
       type: "session_config";
@@ -302,7 +314,7 @@ export type ServerEvent =
   | { type: "error"; sessionId: string; message: string; code: ServerErrorCode; source: ServerErrorSource }
   | { type: "pong"; sessionId: string };
 
-export const WEBSOCKET_PROTOCOL_VERSION = "7.2";
+export const WEBSOCKET_PROTOCOL_VERSION = "7.4";
 
 export const CLIENT_MESSAGE_TYPES = [
   "client_hello",
@@ -314,6 +326,7 @@ export const CLIENT_MESSAGE_TYPES = [
   "provider_catalog_get",
   "provider_auth_methods_get",
   "provider_auth_authorize",
+  "provider_auth_logout",
   "provider_auth_callback",
   "provider_auth_set_api_key",
   "list_tools",
@@ -347,6 +360,8 @@ export const CLIENT_MESSAGE_TYPES = [
   "set_session_title",
   "list_sessions",
   "delete_session",
+  "subagent_create",
+  "subagent_sessions_get",
   "set_config",
   "upload_file",
 ] as const;
@@ -385,6 +400,8 @@ export const SERVER_EVENT_TYPES = [
   "turn_usage",
   "messages",
   "sessions",
+  "subagent_created",
+  "subagent_sessions",
   "session_deleted",
   "session_config",
   "file_uploaded",

@@ -47,6 +47,7 @@ const mockGetAiCoworkerPaths = mock((opts?: { homedir?: string }) => {
     configDir: path.join(rootDir, "config"),
     sessionsDir: path.join(rootDir, "sessions"),
     logsDir: path.join(rootDir, "logs"),
+    skillsDir: path.join(rootDir, "skills"),
     connectionsFile: path.join(authDir, "connections.json"),
   };
 });
@@ -176,6 +177,12 @@ function makeSession(
       model: string | null;
     }>;
     writePersistedSessionSnapshotImpl: (opts: any) => Promise<string>;
+    createSubagentSessionImpl: (opts: any) => Promise<any>;
+    listSubagentSessionsImpl: (parentSessionId: string) => Promise<any[]>;
+    sendSubagentInputImpl: (opts: any) => Promise<void>;
+    waitForSubagentImpl: (opts: any) => Promise<any>;
+    closeSubagentImpl: (opts: any) => Promise<any>;
+    deleteSessionImpl: (opts: any) => Promise<void>;
   }>
 ) {
   const dir = "/tmp/test-session";
@@ -197,6 +204,12 @@ function makeSession(
     generateSessionTitleImpl: overrides?.generateSessionTitleImpl ?? mockGenerateSessionTitle,
     writePersistedSessionSnapshotImpl:
       overrides?.writePersistedSessionSnapshotImpl ?? mockWritePersistedSessionSnapshot,
+    createSubagentSessionImpl: overrides?.createSubagentSessionImpl,
+    listSubagentSessionsImpl: overrides?.listSubagentSessionsImpl,
+    sendSubagentInputImpl: overrides?.sendSubagentInputImpl,
+    waitForSubagentImpl: overrides?.waitForSubagentImpl,
+    closeSubagentImpl: overrides?.closeSubagentImpl,
+    deleteSessionImpl: overrides?.deleteSessionImpl,
   });
   return { session, emit, events, sessionBackupFactory };
 }
@@ -241,6 +254,7 @@ describe("AgentSession", () => {
         configDir: path.join(rootDir, "config"),
         sessionsDir: path.join(rootDir, "sessions"),
         logsDir: path.join(rootDir, "logs"),
+        skillsDir: path.join(rootDir, "skills"),
         connectionsFile: path.join(authDir, "connections.json"),
       };
     });
@@ -326,7 +340,8 @@ describe("AgentSession", () => {
       await flushAsyncWork();
       expect(mockWritePersistedSessionSnapshot).toHaveBeenCalledTimes(1);
       const first = mockWritePersistedSessionSnapshot.mock.calls[0]?.[0] as any;
-      expect(first?.snapshot?.version).toBe(1);
+      expect(first?.snapshot?.version).toBe(3);
+      expect(first?.snapshot?.context?.providerState).toBeNull();
       expect(first?.snapshot?.session?.title).toBe("New session");
     });
   });
@@ -1000,6 +1015,20 @@ describe("AgentSession", () => {
       expect(events.some((e) => e.type === "error")).toBe(false);
     });
 
+    test("clears persisted OpenAI continuation state when provider/model changes", async () => {
+      const { session } = makeSession();
+      (session as any).state.providerState = {
+        provider: "openai",
+        model: "gpt-5.2",
+        responseId: "resp_123",
+        updatedAt: "2026-02-16T00:00:00.000Z",
+      };
+
+      await session.setModel("gpt-5.2", "openai");
+
+      expect((session as any).state.providerState).toBeNull();
+    });
+
     test("emits session_info when provider/model changes", async () => {
       const { session, events } = makeSession();
       await session.setModel("gpt-5.2", "openai");
@@ -1152,6 +1181,12 @@ describe("AgentSession", () => {
         getProviderCatalogImpl: getProviderCatalogImpl as any,
         getProviderStatusesImpl: getProviderStatusesImpl as any,
       });
+      (session as any).state.providerState = {
+        provider: "openai",
+        model: "gpt-5.2",
+        responseId: "resp_before_auth",
+        updatedAt: "2026-02-16T00:00:00.000Z",
+      };
 
       await session.setProviderApiKey("openai", "api_key", "sk-test");
 
@@ -1164,6 +1199,7 @@ describe("AgentSession", () => {
       }
       expect(events.some((e) => e.type === "provider_status")).toBe(true);
       expect(events.some((e) => e.type === "provider_catalog")).toBe(true);
+      expect((session as any).state.providerState).toBeNull();
     });
 
     test("callbackProviderAuth emits provider_auth_result for oauth method", async () => {
@@ -1186,6 +1222,13 @@ describe("AgentSession", () => {
         getProviderCatalogImpl: getProviderCatalogImpl as any,
         getProviderStatusesImpl: getProviderStatusesImpl as any,
       });
+      (session as any).state.providerState = {
+        provider: "codex-cli",
+        model: "gpt-5.4",
+        responseId: "resp_before_oauth",
+        updatedAt: "2026-02-16T00:00:00.000Z",
+        accountId: "acct_123",
+      };
 
       await session.callbackProviderAuth("codex-cli", "oauth_cli");
 
@@ -1195,6 +1238,49 @@ describe("AgentSession", () => {
         expect(authEvt.ok).toBe(true);
         expect(authEvt.provider).toBe("codex-cli");
       }
+      expect((session as any).state.providerState).toBeNull();
+    });
+
+    test("logoutProviderAuth emits provider_auth_result and clears provider state", async () => {
+      const getProviderCatalogImpl = mock(async () => ({
+        all: [{ id: "codex-cli", name: "Codex CLI", models: ["gpt-5.4"], defaultModel: "gpt-5.4" }],
+        default: { "codex-cli": "gpt-5.4" },
+        connected: [],
+      }));
+      const getProviderStatusesImpl = mock(async () => []);
+      const connectProviderImpl = mock(async (_opts: any) => ({
+        ok: true,
+        provider: "codex-cli",
+        mode: "oauth",
+        storageFile: "/tmp/mock-home/.cowork/auth/connections.json",
+        message: "OAuth sign-in completed.",
+      }));
+      const { session, events } = makeSession({
+        connectProviderImpl: connectProviderImpl as any,
+        getAiCoworkerPathsImpl: mockGetAiCoworkerPaths,
+        getProviderCatalogImpl: getProviderCatalogImpl as any,
+        getProviderStatusesImpl: getProviderStatusesImpl as any,
+      });
+      (session as any).state.providerState = {
+        provider: "codex-cli",
+        model: "gpt-5.4",
+        responseId: "resp_before_logout",
+        updatedAt: "2026-02-16T00:00:00.000Z",
+        accountId: "acct_123",
+      };
+
+      await session.logoutProviderAuth("codex-cli");
+
+      const authEvt = events.findLast((e) => e.type === "provider_auth_result");
+      expect(authEvt).toBeDefined();
+      if (authEvt && authEvt.type === "provider_auth_result") {
+        expect(authEvt.ok).toBe(true);
+        expect(authEvt.provider).toBe("codex-cli");
+        expect(authEvt.methodId).toBe("logout");
+      }
+      expect(events.some((e) => e.type === "provider_status")).toBe(true);
+      expect(events.some((e) => e.type === "provider_catalog")).toBe(true);
+      expect((session as any).state.providerState).toBeNull();
     });
   });
 
@@ -1248,6 +1334,20 @@ describe("AgentSession", () => {
       const lastCall = mockRunTurn.mock.calls[1][0] as any;
       expect(lastCall.messages).toHaveLength(1);
       expect(lastCall.messages[0].content).toBe("second");
+    });
+
+    test("clears persisted OpenAI continuation state", () => {
+      const { session } = makeSession();
+      (session as any).state.providerState = {
+        provider: "openai",
+        model: "gpt-5.2",
+        responseId: "resp_123",
+        updatedAt: "2026-02-16T00:00:00.000Z",
+      };
+
+      session.reset();
+
+      expect((session as any).state.providerState).toBeNull();
     });
 
     test("emits reset_done when idle", () => {
@@ -1987,6 +2087,28 @@ describe("AgentSession", () => {
       expect(call.messages).toEqual([{ role: "user", content: "question" }]);
     });
 
+    test("passes allMessages and providerState to runTurn", async () => {
+      const { session } = makeSession();
+      (session as any).state.providerState = {
+        provider: "openai",
+        model: "gpt-5.2",
+        responseId: "resp_prev",
+        updatedAt: "2026-02-16T00:00:00.000Z",
+      };
+
+      await session.sendUserMessage("question");
+
+      const call = mockRunTurn.mock.calls[0][0] as any;
+      expect(call.messages).toEqual([{ role: "user", content: "question" }]);
+      expect(call.allMessages).toEqual([{ role: "user", content: "question" }]);
+      expect(call.providerState).toEqual({
+        provider: "openai",
+        model: "gpt-5.2",
+        responseId: "resp_prev",
+        updatedAt: "2026-02-16T00:00:00.000Z",
+      });
+    });
+
     test("passes maxSteps=100 to runTurn", async () => {
       const { session } = makeSession();
       await session.sendUserMessage("go");
@@ -2036,6 +2158,46 @@ describe("AgentSession", () => {
       expect(secondCall.messages[0]).toEqual({ role: "user", content: "first" });
       expect(secondCall.messages[1]).toEqual(responseMsg);
       expect(secondCall.messages[2]).toEqual({ role: "user", content: "second" });
+    });
+
+    test("retries once when the stored OpenAI continuation handle is rejected", async () => {
+      mockRunTurn
+        .mockImplementationOnce(async () => {
+          throw new Error("Invalid previous_response_id: response not found");
+        })
+        .mockImplementationOnce(async () => ({
+          text: "ok",
+          reasoningText: undefined,
+          responseMessages: [{ role: "assistant", content: "ok" }],
+          providerState: {
+            provider: "openai",
+            model: "gpt-5.2",
+            responseId: "resp_fresh",
+            updatedAt: "2026-02-16T00:00:02.000Z",
+          },
+        }));
+
+      const dir = "/tmp/test-session";
+      const config = { ...makeConfig(dir), provider: "openai" as const, model: "gpt-5.2", subAgentModel: "gpt-5.2" };
+      const { session } = makeSession({ config });
+      (session as any).state.providerState = {
+        provider: "openai",
+        model: "gpt-5.2",
+        responseId: "resp_stale",
+        updatedAt: "2026-02-16T00:00:00.000Z",
+      };
+
+      await session.sendUserMessage("hello");
+
+      expect(mockRunTurn).toHaveBeenCalledTimes(2);
+      expect((mockRunTurn.mock.calls[0][0] as any).providerState?.responseId).toBe("resp_stale");
+      expect((mockRunTurn.mock.calls[1][0] as any).providerState).toBeNull();
+      expect((session as any).state.providerState).toEqual({
+        provider: "openai",
+        model: "gpt-5.2",
+        responseId: "resp_fresh",
+        updatedAt: "2026-02-16T00:00:02.000Z",
+      });
     });
 
     test("persists full session context including response history", async () => {
@@ -3447,6 +3609,73 @@ describe("AgentSession", () => {
       const assistantEvt = events.find((e) => e.type === "assistant_message") as any;
       expect(assistantEvt).toBeDefined();
       expect(assistantEvt.text).toBe("simple string content");
+    });
+
+    test("passes persistentAgentControl to root session turns when child-session callbacks exist", async () => {
+      mockRunTurn.mockImplementation(async (params: any) => {
+        expect(params.persistentAgentControl).toBeDefined();
+        expect(typeof params.persistentAgentControl.spawn).toBe("function");
+        expect(typeof params.persistentAgentControl.list).toBe("function");
+        expect(typeof params.persistentAgentControl.sendInput).toBe("function");
+        expect(typeof params.persistentAgentControl.wait).toBe("function");
+        expect(typeof params.persistentAgentControl.close).toBe("function");
+        return {
+          text: "ok",
+          reasoningText: undefined,
+          responseMessages: [{ role: "assistant", content: "ok" }],
+        };
+      });
+
+      const createSubagentSessionImpl = mock(async () => ({
+        sessionId: "sub-1",
+        parentSessionId: "parent-1",
+        agentType: "general" as const,
+        title: "Child",
+        provider: "google" as const,
+        model: "gemini-2.0-flash",
+        createdAt: "2026-03-08T00:00:00.000Z",
+        updatedAt: "2026-03-08T00:00:00.000Z",
+        status: "active" as const,
+        busy: true,
+      }));
+
+      const { session } = makeSession({
+        createSubagentSessionImpl,
+        listSubagentSessionsImpl: async () => [],
+        sendSubagentInputImpl: async () => {},
+        waitForSubagentImpl: async () => ({ sessionId: "sub-1", status: "completed" as const, busy: false }),
+        closeSubagentImpl: async () => ({
+          sessionId: "sub-1",
+          parentSessionId: "parent-1",
+          agentType: "general" as const,
+          title: "Child",
+          provider: "google" as const,
+          model: "gemini-2.0-flash",
+          createdAt: "2026-03-08T00:00:00.000Z",
+          updatedAt: "2026-03-08T00:00:00.000Z",
+          status: "closed" as const,
+          busy: false,
+        }),
+      });
+
+      await session.sendUserMessage("go");
+      expect(mockRunTurn).toHaveBeenCalledTimes(1);
+    });
+
+    test("reopens a closed session when new input arrives", async () => {
+      mockRunTurn.mockImplementation(async () => ({
+        text: "reopened",
+        reasoningText: undefined,
+        responseMessages: [{ role: "assistant", content: "reopened" }],
+      }));
+
+      const { session } = makeSession();
+      await session.closeForHistory();
+      expect((session as any).state.persistenceStatus).toBe("closed");
+
+      await session.sendUserMessage("reopen me");
+
+      expect((session as any).state.persistenceStatus).toBe("active");
     });
   });
 });

@@ -241,6 +241,19 @@ describe("desktop protocol v2 mapping", () => {
     expect(sentTypes).toContain("provider_auth_callback");
   });
 
+  test("logoutProviderAuth sends provider_auth_logout", async () => {
+    await useAppStore.getState().newThread({ workspaceId });
+    const controlSocket = socketByClient("desktop-control");
+    emitServerHello(controlSocket, "control-session");
+    controlSocket.sent = [];
+
+    await useAppStore.getState().logoutProviderAuth("codex-cli");
+
+    const sent = controlSocket.sent.find((msg) => msg?.type === "provider_auth_logout");
+    expect(sent).toBeDefined();
+    expect(sent?.provider).toBe("codex-cli");
+  });
+
   test("provider auth challenge keeps command metadata for desktop UI", async () => {
     await useAppStore.getState().newThread({ workspaceId });
     const controlSocket = socketByClient("desktop-control");
@@ -253,7 +266,7 @@ describe("desktop protocol v2 mapping", () => {
       methodId: "oauth_cli",
       challenge: {
         method: "auto",
-        instructions: "The app will open the PI-native sign-in URL automatically.",
+        instructions: "The app will open Cowork's Codex sign-in URL automatically.",
         url: "https://auth.openai.com/oauth/authorize",
         command: "optional-command",
       },
@@ -287,6 +300,25 @@ describe("desktop protocol v2 mapping", () => {
     const notification = useAppStore.getState().notifications.at(-1);
     expect(notification?.title).toBe("Provider auth pending: claude-code");
     expect(notification?.detail).toBe("Complete sign-in in terminal.");
+  });
+
+  test("provider auth logout result uses disconnected notification title", async () => {
+    await useAppStore.getState().newThread({ workspaceId });
+    const controlSocket = socketByClient("desktop-control");
+    emitServerHello(controlSocket, "control-session");
+
+    controlSocket.emit({
+      type: "provider_auth_result",
+      sessionId: "control-session",
+      provider: "codex-cli",
+      methodId: "logout",
+      ok: true,
+      message: "Codex OAuth credentials cleared.",
+    });
+
+    const notification = useAppStore.getState().notifications.at(-1);
+    expect(notification?.title).toBe("Provider disconnected: codex-cli");
+    expect(notification?.detail).toBe("Codex OAuth credentials cleared.");
   });
 
   test("approval prompt keeps required reasonCode", async () => {

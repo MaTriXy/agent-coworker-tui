@@ -4,6 +4,8 @@ import { getModel as realGetModel } from "./config";
 import { buildRuntimeTelemetrySettings } from "./observability/runtime";
 import { buildGooglePrepareStep } from "./providers/googleReplay";
 import { createRuntime } from "./runtime";
+import type { OpenAiContinuationState } from "./shared/openaiContinuation";
+import type { PersistentAgentControl } from "./tools";
 import type { AgentConfig, ModelMessage, TodoItem } from "./types";
 import { loadMCPServers, loadMCPTools } from "./mcp";
 import { createTools } from "./tools";
@@ -43,6 +45,9 @@ export interface RunTurnParams {
   config: AgentConfig;
   system: string;
   messages: ModelMessage[];
+  allMessages?: ModelMessage[];
+  providerState?: OpenAiContinuationState | null;
+  persistentAgentControl?: PersistentAgentControl;
 
   log: (line: string) => void;
   askUser: (question: string, options?: string[]) => Promise<string>;
@@ -195,6 +200,7 @@ export function createRunTurn(overrides: RunTurnOverrides = {}) {
     reasoningText?: string;
     responseMessages: ModelMessage[];
     usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+    providerState?: OpenAiContinuationState;
   }> {
     const { config, system, messages, log, askUser, approveCommand, updateTodos, discoveredSkills, abortSignal } = params;
 
@@ -208,6 +214,7 @@ export function createRunTurn(overrides: RunTurnOverrides = {}) {
       abortSignal,
       availableSkills: discoveredSkills,
       turnUserPrompt: extractTurnUserPrompt(messages),
+      persistentAgentControl: params.persistentAgentControl,
     };
     const builtInTools = deps.createTools(toolCtx);
 
@@ -341,9 +348,11 @@ export function createRunTurn(overrides: RunTurnOverrides = {}) {
           config,
           system: turnSystem,
           messages,
+          allMessages: params.allMessages,
           tools,
           maxSteps: params.maxSteps ?? 100,
           providerOptions: turnProviderOptions,
+          providerState: params.providerState,
           abortSignal,
           includeRawChunks: params.includeRawChunks ?? true,
           telemetry,
@@ -375,6 +384,7 @@ export async function runTurnWithDeps(
   reasoningText?: string;
   responseMessages: ModelMessage[];
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  providerState?: OpenAiContinuationState;
 }> {
   return await createRunTurn(overrides)(params);
 }

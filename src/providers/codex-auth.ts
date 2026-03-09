@@ -5,6 +5,8 @@ import { z } from "zod";
 export const CODEX_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 export const CODEX_OAUTH_ISSUER = "https://auth.openai.com";
 export const CODEX_BACKEND_BASE_URL = "https://chatgpt.com/backend-api/codex";
+export const CODEX_OAUTH_SCOPE = "openid profile email offline_access api.connectors.read api.connectors.invoke";
+export const CODEX_OAUTH_ORIGINATOR = "codex_cli_rs";
 
 export type CodexAuthPaths = {
   authDir: string;
@@ -382,6 +384,23 @@ export async function writeCodexAuthMaterial(
     // best effort only
   }
   return normalized;
+}
+
+export async function clearCodexAuthMaterial(
+  paths: Pick<CodexAuthPaths, "authDir">,
+): Promise<{ file: string; removed: boolean }> {
+  const file = codexAuthFilePath(paths);
+  try {
+    await fs.rm(file, { force: true });
+    return { file, removed: true };
+  } catch (error) {
+    const parsedCode = errorWithCodeSchema.safeParse(error);
+    const code = parsedCode.success ? parsedCode.data.code : undefined;
+    if (code === "ENOENT") {
+      return { file, removed: false };
+    }
+    throw error;
+  }
 }
 
 export async function readCodexAuthMaterial(

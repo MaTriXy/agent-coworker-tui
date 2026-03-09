@@ -246,7 +246,11 @@ export function createServerEventHandler(ctx: ReplServerEventContext) {
         break;
       case "provider_auth_result":
         if (evt.ok) {
-          console.log(`\nProvider auth ok: ${evt.provider}/${evt.methodId} (${evt.mode ?? "ok"})`);
+          if (evt.methodId === "logout") {
+            console.log(`\nProvider disconnected: ${evt.provider}`);
+          } else {
+            console.log(`\nProvider auth ok: ${evt.provider}/${evt.methodId} (${evt.mode ?? "ok"})`);
+          }
         } else {
           console.error(`\nProvider auth failed: ${evt.message}`);
         }

@@ -3,9 +3,11 @@ import {
   type ConnectProviderHandler,
   authorizeProviderAuth,
   callbackProviderAuth as callbackProviderAuthMethod,
+  logoutProviderAuth as logoutProviderAuthMethod,
   resolveProviderAuthMethod,
   setProviderApiKey as setProviderApiKeyMethod,
 } from "../../providers/authRegistry";
+import { supportsOpenAiContinuation } from "../../shared/openaiContinuation";
 import { isProviderName } from "../../types";
 import type { AgentConfig, ServerErrorCode, ServerErrorSource } from "../../types";
 import type { ServerEvent } from "../protocol";
@@ -29,6 +31,7 @@ export class ProviderAuthManager {
       ) => void;
       formatError: (err: unknown) => string;
       log: (line: string) => void;
+      clearProviderState: () => void;
       persistModelSelection?: (selection: {
         provider: AgentConfig["provider"];
         model: string;
@@ -65,6 +68,8 @@ export class ProviderAuthManager {
     const nextSubAgentModel = currentConfig.subAgentModel === currentConfig.model
       ? modelId
       : currentConfig.subAgentModel;
+    const shouldClearProviderState =
+      currentConfig.provider !== nextProvider || currentConfig.model !== modelId;
 
     this.opts.setConfig({
       ...currentConfig,
@@ -72,6 +77,9 @@ export class ProviderAuthManager {
       model: modelId,
       subAgentModel: nextSubAgentModel,
     });
+    if (shouldClearProviderState) {
+      this.opts.clearProviderState();
+    }
 
     let persistError: unknown = null;
     if (this.opts.persistModelSelection) {
@@ -188,6 +196,10 @@ export class ProviderAuthManager {
       });
 
       if (result.ok) {
+        if (supportsOpenAiContinuation(providerRaw)) {
+          this.opts.clearProviderState();
+        }
+        this.opts.queuePersistSessionSnapshot("provider.auth.callback");
         await this.opts.refreshProviderStatus();
         await this.opts.emitProviderCatalog();
       }
@@ -214,6 +226,65 @@ export class ProviderAuthManager {
           error: this.opts.formatError(err),
         },
         Date.now() - startedAt
+      );
+    } finally {
+      this.opts.setConnecting(false);
+    }
+  }
+
+  async logoutProviderAuth(providerRaw: AgentConfig["provider"]) {
+    if (!this.opts.guardBusy()) return;
+    if (!isProviderName(providerRaw)) {
+      this.opts.emitError("validation_failed", "provider", `Unsupported provider: ${String(providerRaw)}`);
+      return;
+    }
+
+    this.opts.setConnecting(true);
+    const startedAt = Date.now();
+    try {
+      const result = await logoutProviderAuthMethod({
+        provider: providerRaw,
+        paths: this.opts.getCoworkPaths(),
+      });
+
+      this.opts.emit({
+        type: "provider_auth_result",
+        sessionId: this.opts.sessionId,
+        provider: providerRaw,
+        methodId: "logout",
+        ok: result.ok,
+        message: result.message,
+      });
+
+      if (result.ok) {
+        if (supportsOpenAiContinuation(providerRaw)) {
+          this.opts.clearProviderState();
+        }
+        this.opts.queuePersistSessionSnapshot("provider.auth.logout");
+        await this.opts.refreshProviderStatus();
+        await this.opts.emitProviderCatalog();
+      }
+
+      this.opts.emitTelemetry(
+        "provider.auth.logout",
+        result.ok ? "ok" : "error",
+        {
+          sessionId: this.opts.sessionId,
+          provider: providerRaw,
+        },
+        Date.now() - startedAt,
+      );
+    } catch (err) {
+      this.opts.emitError("provider_error", "provider", `Provider logout failed: ${String(err)}`);
+      this.opts.emitTelemetry(
+        "provider.auth.logout",
+        "error",
+        {
+          sessionId: this.opts.sessionId,
+          provider: providerRaw,
+          error: this.opts.formatError(err),
+        },
+        Date.now() - startedAt,
       );
     } finally {
       this.opts.setConnecting(false);
@@ -260,6 +331,10 @@ export class ProviderAuthManager {
       });
 
       if (result.ok) {
+        if (supportsOpenAiContinuation(providerRaw)) {
+          this.opts.clearProviderState();
+        }
+        this.opts.queuePersistSessionSnapshot("provider.auth.api_key");
         await this.opts.refreshProviderStatus();
         await this.opts.emitProviderCatalog();
       }

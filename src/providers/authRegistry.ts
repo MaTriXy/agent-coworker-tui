@@ -1,4 +1,11 @@
-import { writeToolApiKey, type AiCoworkerPaths, type ConnectProviderResult, type OauthStdioMode } from "../connect";
+import {
+  disconnectProvider,
+  writeToolApiKey,
+  type AiCoworkerPaths,
+  type ConnectProviderResult,
+  type DisconnectProviderResult,
+  type OauthStdioMode,
+} from "../connect";
 import { PROVIDER_NAMES, type ProviderName } from "../types";
 
 export type ProviderAuthMethodType = "api" | "oauth";
@@ -27,6 +34,11 @@ export type ConnectProviderHandler = (opts: {
   oauthStdioMode?: OauthStdioMode;
   onOauthLine?: (line: string) => void;
 }) => Promise<ConnectProviderResult>;
+
+export type DisconnectProviderHandler = (opts: {
+  provider: ProviderName;
+  paths?: AiCoworkerPaths;
+}) => Promise<DisconnectProviderResult>;
 
 const PROVIDER_AUTH_METHODS: Record<ProviderName, ProviderAuthMethod[]> = {
   google: [
@@ -74,7 +86,7 @@ export function authorizeProviderAuth(opts: {
       ok: true,
       challenge: {
         method: method.oauthMode ?? "auto",
-        instructions: "Continue to open browser-based ChatGPT OAuth and finish sign-in. The app will open the PI-native sign-in URL automatically.",
+        instructions: "Continue to open browser-based ChatGPT OAuth and finish sign-in. The app will open Cowork's Codex sign-in URL automatically.",
       },
     };
   }
@@ -163,5 +175,17 @@ export async function callbackProviderAuth(opts: {
     paths: opts.paths,
     oauthStdioMode: opts.oauthStdioMode,
     onOauthLine: opts.onOauthLine,
+  });
+}
+
+export async function logoutProviderAuth(opts: {
+  provider: ProviderName;
+  paths?: AiCoworkerPaths;
+  disconnect?: DisconnectProviderHandler;
+}): Promise<DisconnectProviderResult> {
+  const disconnect = opts.disconnect ?? disconnectProvider;
+  return await disconnect({
+    provider: opts.provider,
+    paths: opts.paths,
   });
 }
