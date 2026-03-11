@@ -1,3 +1,18 @@
+# Task: Add changelog entry for v0.1.19
+
+## Plan
+- [x] Review the shipped `v0.1.18..v0.1.19` commit range and task log to extract only the release-relevant user-facing changes.
+- [x] Create a top-level `CHANGELOG.md` and add a concise `0.1.19` entry that matches the shipped work.
+- [x] Run the repo verification needed for a docs-only update and record the outcome below.
+
+## Review
+- Added a new repo-level `CHANGELOG.md` because the project did not already have a changelog file. The new `0.1.19` entry documents the shipped release in user-facing terms instead of forcing readers to reconstruct it from tags and task history.
+- The entry covers the real release themes from `v0.1.18..v0.1.19`: the desktop backup recovery console and backup controls, sidebar/composer refinements, Codex auth persistence and recovery improvements, and desktop diagnostic parity/freeze fixes.
+- Verification:
+  - `~/.bun/bin/bun run docs:check` -> pass
+  - `~/.bun/bin/bun test` -> pass (`1998 pass, 2 skip, 0 fail`)
+  - `git diff --check` -> pass
+
 # Task: Ship v0.1.19
 
 ## Plan
