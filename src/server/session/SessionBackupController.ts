@@ -158,7 +158,7 @@ export class SessionBackupController {
         return;
       }
 
-      this.context.state.sessionBackupState = this.buildInitializingState();
+      this.context.state.sessionBackupState = this.buildPlaceholderState("initializing");
       this.context.state.sessionBackupInit = null;
       await this.ensureSessionBackupInitialized();
     });
@@ -170,8 +170,8 @@ export class SessionBackupController {
       await this.ensureSessionBackupInitialized();
       if (!this.context.state.sessionBackup) {
         this.context.state.sessionBackupState = this.getBackupsEnabled()
-          ? this.buildInitializingState()
-          : this.buildDisabledState();
+          ? this.buildPlaceholderState("initializing")
+          : this.buildPlaceholderState("disabled");
         return;
       }
       this.context.state.sessionBackupState = await this.context.state.sessionBackup.reloadFromDisk();
@@ -191,21 +191,9 @@ export class SessionBackupController {
     return this.context.state.backupsEnabledOverride ?? this.context.state.config.backupsEnabled ?? true;
   }
 
-  private buildInitializingState() {
+  private buildPlaceholderState(status: "initializing" | "disabled") {
     return {
-      status: "initializing" as const,
-      sessionId: this.context.id,
-      workingDirectory: this.context.state.config.workingDirectory,
-      backupDirectory: null,
-      createdAt: this.context.state.sessionInfo.createdAt,
-      originalSnapshot: { kind: "pending" as const },
-      checkpoints: [],
-    };
-  }
-
-  private buildDisabledState() {
-    return {
-      status: "disabled" as const,
+      status,
       sessionId: this.context.id,
       workingDirectory: this.context.state.config.workingDirectory,
       backupDirectory: null,
@@ -227,14 +215,14 @@ export class SessionBackupController {
     this.context.state.sessionBackupInit = null;
     this.context.state.lastAutoCheckpointAt = 0;
     this.context.state.sessionBackupState = mode === "disabled"
-      ? this.buildDisabledState()
-      : this.buildInitializingState();
+      ? this.buildPlaceholderState("disabled")
+      : this.buildPlaceholderState("initializing");
   }
 
   private async initializeSessionBackup() {
     if (!this.getBackupsEnabled()) {
       this.context.state.sessionBackup = null;
-      this.context.state.sessionBackupState = this.buildDisabledState();
+      this.context.state.sessionBackupState = this.buildPlaceholderState("disabled");
       return;
     }
 
@@ -276,7 +264,7 @@ export class SessionBackupController {
     }
 
     if (!this.context.state.sessionBackupInit) {
-      this.context.state.sessionBackupState = this.buildInitializingState();
+      this.context.state.sessionBackupState = this.buildPlaceholderState("initializing");
       this.context.state.sessionBackupInit = this.initializeSessionBackup();
     }
     await this.context.state.sessionBackupInit;

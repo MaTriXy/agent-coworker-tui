@@ -120,159 +120,79 @@ export class SessionAdminManager {
   }
 
   async listWorkspaceBackups() {
-    if ((this.context.state.sessionInfo.sessionKind ?? "root") !== "root") {
-      this.context.emitError("validation_failed", "backup", "Only root sessions can list workspace backups");
-      return;
-    }
-    if (!this.context.deps.listWorkspaceBackupsImpl) {
-      this.context.emitError("internal_error", "backup", "Workspace backup listing is unavailable");
-      return;
-    }
-    try {
-      const backups = await this.context.deps.listWorkspaceBackupsImpl({
-        requesterSessionId: this.context.id,
-        workingDirectory: this.context.state.config.workingDirectory,
-      });
-      this.context.emit({
-        type: "workspace_backups",
-        sessionId: this.context.id,
-        workspacePath: this.context.state.config.workingDirectory,
-        backups,
-      });
-    } catch (err) {
-      this.context.emitError("backup_error", "backup", `Failed to list workspace backups: ${String(err)}`);
-    }
+    await this.runWorkspaceBackupOp(
+      "listWorkspaceBackupsImpl",
+      "list workspace backups",
+      (impl) => impl({ requesterSessionId: this.context.id, workingDirectory: this.context.state.config.workingDirectory }),
+      (backups) => ({ type: "workspace_backups" as const, sessionId: this.context.id, workspacePath: this.context.state.config.workingDirectory, backups }),
+    );
   }
 
   async createWorkspaceBackupCheckpoint(targetSessionId: string) {
-    if ((this.context.state.sessionInfo.sessionKind ?? "root") !== "root") {
-      this.context.emitError("validation_failed", "backup", "Only root sessions can manage workspace backups");
-      return;
-    }
-    if (!this.context.deps.createWorkspaceBackupCheckpointImpl) {
-      this.context.emitError("internal_error", "backup", "Workspace backup checkpointing is unavailable");
-      return;
-    }
-    try {
-      const backups = await this.context.deps.createWorkspaceBackupCheckpointImpl({
-        requesterSessionId: this.context.id,
-        workingDirectory: this.context.state.config.workingDirectory,
-        targetSessionId,
-      });
-      this.context.emit({
-        type: "workspace_backups",
-        sessionId: this.context.id,
-        workspacePath: this.context.state.config.workingDirectory,
-        backups,
-      });
-    } catch (err) {
-      this.context.emitError("backup_error", "backup", `Failed to create workspace checkpoint: ${String(err)}`);
-    }
+    await this.runWorkspaceBackupOp(
+      "createWorkspaceBackupCheckpointImpl",
+      "create workspace checkpoint",
+      (impl) => impl({ requesterSessionId: this.context.id, workingDirectory: this.context.state.config.workingDirectory, targetSessionId }),
+      (backups) => ({ type: "workspace_backups" as const, sessionId: this.context.id, workspacePath: this.context.state.config.workingDirectory, backups }),
+    );
   }
 
   async restoreWorkspaceBackup(targetSessionId: string, checkpointId?: string) {
-    if ((this.context.state.sessionInfo.sessionKind ?? "root") !== "root") {
-      this.context.emitError("validation_failed", "backup", "Only root sessions can manage workspace backups");
-      return;
-    }
-    if (!this.context.deps.restoreWorkspaceBackupImpl) {
-      this.context.emitError("internal_error", "backup", "Workspace backup restore is unavailable");
-      return;
-    }
-    try {
-      const backups = await this.context.deps.restoreWorkspaceBackupImpl({
-        requesterSessionId: this.context.id,
-        workingDirectory: this.context.state.config.workingDirectory,
-        targetSessionId,
-        checkpointId,
-      });
-      this.context.emit({
-        type: "workspace_backups",
-        sessionId: this.context.id,
-        workspacePath: this.context.state.config.workingDirectory,
-        backups,
-      });
-    } catch (err) {
-      this.context.emitError("backup_error", "backup", `Failed to restore workspace backup: ${String(err)}`);
-    }
+    await this.runWorkspaceBackupOp(
+      "restoreWorkspaceBackupImpl",
+      "restore workspace backup",
+      (impl) => impl({ requesterSessionId: this.context.id, workingDirectory: this.context.state.config.workingDirectory, targetSessionId, checkpointId }),
+      (backups) => ({ type: "workspace_backups" as const, sessionId: this.context.id, workspacePath: this.context.state.config.workingDirectory, backups }),
+    );
   }
 
   async deleteWorkspaceBackupCheckpoint(targetSessionId: string, checkpointId: string) {
-    if ((this.context.state.sessionInfo.sessionKind ?? "root") !== "root") {
-      this.context.emitError("validation_failed", "backup", "Only root sessions can manage workspace backups");
-      return;
-    }
-    if (!this.context.deps.deleteWorkspaceBackupCheckpointImpl) {
-      this.context.emitError("internal_error", "backup", "Workspace backup deletion is unavailable");
-      return;
-    }
-    try {
-      const backups = await this.context.deps.deleteWorkspaceBackupCheckpointImpl({
-        requesterSessionId: this.context.id,
-        workingDirectory: this.context.state.config.workingDirectory,
-        targetSessionId,
-        checkpointId,
-      });
-      this.context.emit({
-        type: "workspace_backups",
-        sessionId: this.context.id,
-        workspacePath: this.context.state.config.workingDirectory,
-        backups,
-      });
-    } catch (err) {
-      this.context.emitError("backup_error", "backup", `Failed to delete workspace checkpoint: ${String(err)}`);
-    }
+    await this.runWorkspaceBackupOp(
+      "deleteWorkspaceBackupCheckpointImpl",
+      "delete workspace checkpoint",
+      (impl) => impl({ requesterSessionId: this.context.id, workingDirectory: this.context.state.config.workingDirectory, targetSessionId, checkpointId }),
+      (backups) => ({ type: "workspace_backups" as const, sessionId: this.context.id, workspacePath: this.context.state.config.workingDirectory, backups }),
+    );
   }
 
   async deleteWorkspaceBackupEntry(targetSessionId: string) {
-    if ((this.context.state.sessionInfo.sessionKind ?? "root") !== "root") {
-      this.context.emitError("validation_failed", "backup", "Only root sessions can manage workspace backups");
-      return;
-    }
-    if (!this.context.deps.deleteWorkspaceBackupEntryImpl) {
-      this.context.emitError("internal_error", "backup", "Workspace backup deletion is unavailable");
-      return;
-    }
-    try {
-      const backups = await this.context.deps.deleteWorkspaceBackupEntryImpl({
-        requesterSessionId: this.context.id,
-        workingDirectory: this.context.state.config.workingDirectory,
-        targetSessionId,
-      });
-      this.context.emit({
-        type: "workspace_backups",
-        sessionId: this.context.id,
-        workspacePath: this.context.state.config.workingDirectory,
-        backups,
-      });
-    } catch (err) {
-      this.context.emitError("backup_error", "backup", `Failed to delete workspace backup: ${String(err)}`);
-    }
+    await this.runWorkspaceBackupOp(
+      "deleteWorkspaceBackupEntryImpl",
+      "delete workspace backup",
+      (impl) => impl({ requesterSessionId: this.context.id, workingDirectory: this.context.state.config.workingDirectory, targetSessionId }),
+      (backups) => ({ type: "workspace_backups" as const, sessionId: this.context.id, workspacePath: this.context.state.config.workingDirectory, backups }),
+    );
   }
 
   async getWorkspaceBackupDelta(targetSessionId: string, checkpointId: string) {
+    await this.runWorkspaceBackupOp(
+      "getWorkspaceBackupDeltaImpl",
+      "inspect workspace backup delta",
+      (impl) => impl({ requesterSessionId: this.context.id, workingDirectory: this.context.state.config.workingDirectory, targetSessionId, checkpointId }),
+      (delta) => ({ type: "workspace_backup_delta" as const, sessionId: this.context.id, ...delta }),
+    );
+  }
+
+  private async runWorkspaceBackupOp<K extends keyof import("./SessionContext").SessionDependencies, T>(
+    implKey: K,
+    label: string,
+    execute: (impl: NonNullable<import("./SessionContext").SessionDependencies[K]>) => Promise<T>,
+    buildEvent: (result: T) => import("../protocol").ServerEvent,
+  ): Promise<void> {
     if ((this.context.state.sessionInfo.sessionKind ?? "root") !== "root") {
-      this.context.emitError("validation_failed", "backup", "Only root sessions can inspect workspace backup deltas");
+      this.context.emitError("validation_failed", "backup", `Only root sessions can ${label}`);
       return;
     }
-    if (!this.context.deps.getWorkspaceBackupDeltaImpl) {
-      this.context.emitError("internal_error", "backup", "Workspace backup delta inspection is unavailable");
+    const impl = this.context.deps[implKey];
+    if (!impl) {
+      this.context.emitError("internal_error", "backup", `Workspace backup operation is unavailable: ${label}`);
       return;
     }
     try {
-      const delta = await this.context.deps.getWorkspaceBackupDeltaImpl({
-        requesterSessionId: this.context.id,
-        workingDirectory: this.context.state.config.workingDirectory,
-        targetSessionId,
-        checkpointId,
-      });
-      this.context.emit({
-        type: "workspace_backup_delta",
-        sessionId: this.context.id,
-        ...delta,
-      });
+      const result = await execute(impl);
+      this.context.emit(buildEvent(result));
     } catch (err) {
-      this.context.emitError("backup_error", "backup", `Failed to inspect workspace backup delta: ${String(err)}`);
+      this.context.emitError("backup_error", "backup", `Failed to ${label}: ${String(err)}`);
     }
   }
 

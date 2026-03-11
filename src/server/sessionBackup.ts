@@ -188,6 +188,26 @@ async function fingerprintSnapshot(sessionDir: string, snapshot: { kind: "direct
   }
 }
 
+async function normalizeMetadataOnLoad(
+  metadata: SessionBackupMetadata,
+  sessionDir: string,
+  metadataPath: string,
+): Promise<{ metadata: SessionBackupMetadata; originalFingerprint: string }> {
+  const originalFingerprint = metadata.originalFingerprint
+    ?? await fingerprintSnapshot(sessionDir, metadata.originalSnapshot);
+  const fingerprintNormalizedMetadata = metadata.originalFingerprint
+    ? metadata
+    : { ...metadata, originalFingerprint };
+  const { metadata: normalizedMetadata, changed: addedInitialCheckpoint } = withInitialCheckpoint(
+    fingerprintNormalizedMetadata,
+    originalFingerprint,
+  );
+  if (!metadata.originalFingerprint || addedInitialCheckpoint) {
+    await writeJson(metadataPath, normalizedMetadata);
+  }
+  return { metadata: normalizedMetadata, originalFingerprint };
+}
+
 // ---------------------------------------------------------------------------
 // SessionBackupManager
 // ---------------------------------------------------------------------------
@@ -297,21 +317,10 @@ export class SessionBackupManager implements SessionBackupHandle {
     if (!metadata) {
       throw new Error(`Missing backup metadata at ${metadataPath}`);
     }
-    const originalFingerprint = metadata.originalFingerprint
-      ?? await fingerprintSnapshot(sessionDir, metadata.originalSnapshot);
-    const fingerprintNormalizedMetadata = metadata.originalFingerprint
-      ? metadata
-      : { ...metadata, originalFingerprint };
-    const { metadata: normalizedMetadata, changed: addedInitialCheckpoint } = withInitialCheckpoint(
-      fingerprintNormalizedMetadata,
-      originalFingerprint,
-    );
-    if (!metadata.originalFingerprint || addedInitialCheckpoint) {
-      await writeJson(metadataPath, normalizedMetadata);
-    }
+    const normalized = await normalizeMetadataOnLoad(metadata, sessionDir, metadataPath);
     return new SessionBackupManager({
-      metadata: normalizedMetadata,
-      originalFingerprint,
+      metadata: normalized.metadata,
+      originalFingerprint: normalized.originalFingerprint,
       sessionDir,
       metadataPath,
     });
@@ -440,20 +449,9 @@ export class SessionBackupManager implements SessionBackupHandle {
     if (!metadata) {
       throw new Error(`Missing backup metadata at ${this.metadataPath}`);
     }
-    const originalFingerprint = metadata.originalFingerprint
-      ?? await fingerprintSnapshot(this.sessionDir, metadata.originalSnapshot);
-    const fingerprintNormalizedMetadata = metadata.originalFingerprint
-      ? metadata
-      : { ...metadata, originalFingerprint };
-    const { metadata: normalizedMetadata, changed: addedInitialCheckpoint } = withInitialCheckpoint(
-      fingerprintNormalizedMetadata,
-      originalFingerprint,
-    );
-    this.metadata = normalizedMetadata;
-    this.originalFingerprint = originalFingerprint;
-    if (!metadata.originalFingerprint || addedInitialCheckpoint) {
-      await this.persistMetadata();
-    }
+    const normalized = await normalizeMetadataOnLoad(metadata, this.sessionDir, this.metadataPath);
+    this.metadata = normalized.metadata;
+    this.originalFingerprint = normalized.originalFingerprint;
     return this.getPublicState();
   }
 
