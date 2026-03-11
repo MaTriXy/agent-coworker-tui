@@ -1,5 +1,6 @@
 # Lessons
 
+- When a user explicitly wants a release pushed for CI/tag-driven packaging, stop local artifact builds after core validation and push the release/tag instead of spending time on local packaging smoke tests.
 - When fixing immutable snapshot or validation bugs in this repo, audit every parallel export/input surface in the same flow; partial fixes like cloning only `byModel` or loosening only the WebSocket parser can leave the same contract broken through `turns` or tool-schema validation.
 - When session budget state changes at a threshold boundary, do not rely on the next aggregate `session_usage` snapshot to surface it; emit a dedicated websocket event at the transition and keep the client/parser contract strict enough to reject malformed nested usage payloads.
 - For desktop transcript hydration, reuse the shared strict protocol snapshot schema for `session_usage` instead of accepting any object-shaped replay payload; malformed transcript rows must be dropped before they reach `threadRuntime.sessionUsage`.

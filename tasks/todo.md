@@ -1,3 +1,21 @@
+# Task: Ship v0.1.19
+
+## Plan
+- [x] Confirm the next release version and the full set of versioned files that must change for a tagged app release.
+- [x] Bump every release-version surface from `0.1.18` to `0.1.19` using the same file set as the prior tagged release.
+- [x] Run the repo's release verification commands and confirm the worktree is clean aside from the intended release changes.
+- [x] Commit the release, push `main`, create and push tag `v0.1.19`, then record the final evidence below.
+
+## Review
+- Release version was bumped to `0.1.19` in the root package, desktop package, CLI/TUI/desktop socket client version strings, MCP client version string, and the desktop updates-page release fixture so packaged metadata stays aligned.
+- The release will ship the current `main` commit range since `v0.1.18`, and the existing tag-driven GitHub Actions workflow will package and publish the desktop artifacts once `v0.1.19` is pushed.
+- Verification:
+  - `~/.bun/bin/bun run docs:check` -> pass
+  - `~/.bun/bin/bun test` -> pass (`1998 pass, 2 skip, 0 fail`)
+  - `~/.bun/bin/bun run typecheck` -> pass
+  - `git diff --check` -> pass
+  - Local desktop packaging was intentionally skipped for the final release flow after the user clarified that CI/tag-driven packaging is sufficient for this ship.
+
 # Task: Improve desktop developer diagnostics for replay/live transcript parity
 
 ## Plan
