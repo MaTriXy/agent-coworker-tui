@@ -142,6 +142,49 @@ describe("desktop persistence state validation", () => {
     expect(loaded.providerState?.statusByName?.["codex-cli"]?.account?.email).toBe("max@example.com");
   });
 
+  test("saveState drops recoverable expired codex status snapshots that would look disconnected on restart", async () => {
+    const persistence = new PersistenceService();
+    const validWorkspace = path.join(userDataDir, "workspace-provider-recoverable");
+    await fs.mkdir(validWorkspace, { recursive: true });
+
+    await persistence.saveState({
+      version: 2,
+      workspaces: [
+        {
+          id: "ws_provider_recoverable",
+          name: "Recoverable provider workspace",
+          path: validWorkspace,
+          createdAt: TS,
+          lastOpenedAt: TS,
+          defaultEnableMcp: true,
+          yolo: false,
+        },
+      ],
+      threads: [],
+      developerMode: false,
+      showHiddenFiles: false,
+      providerState: {
+        statusByName: {
+          "codex-cli": {
+            provider: "codex-cli",
+            authorized: false,
+            verified: false,
+            mode: "oauth",
+            account: { email: "max@example.com" },
+            message: "Codex token expired. Token refresh failed: temporary outage",
+            checkedAt: TS,
+            tokenRecoverable: true,
+          },
+        },
+        statusLastUpdatedAt: TS,
+      },
+    });
+
+    const loaded = await persistence.loadState();
+    expect(loaded.providerState?.statusByName?.["codex-cli"]).toBeUndefined();
+    expect(loaded.providerState?.statusLastUpdatedAt).toBe(TS);
+  });
+
   test("loadState sanitizes malformed on-disk payloads instead of failing", async () => {
     const persistence = new PersistenceService();
     const validWorkspace = path.join(userDataDir, "workspace-from-disk");
