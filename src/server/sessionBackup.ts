@@ -419,6 +419,8 @@ export class SessionBackupManager implements SessionBackupHandle {
     if (idx < 0) return false;
 
     const checkpoint = this.metadata.checkpoints[idx];
+    if (checkpoint.trigger === "initial") return false;
+
     this.metadata.checkpoints.splice(idx, 1);
     const snapshotStillReferenced =
       this.metadata.checkpoints.some(

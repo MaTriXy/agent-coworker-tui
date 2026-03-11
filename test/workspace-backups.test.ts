@@ -324,4 +324,26 @@ describe("WorkspaceBackupService", () => {
     expect(updatedMetadata?.originalFingerprint).toBeTruthy();
     expect(entry?.checkpoints).toHaveLength(2);
   });
+
+  test("cannot delete the initial checkpoint", async () => {
+    const { home, workspaceA } = await makeTmpWorkspaces();
+    await fs.writeFile(path.join(workspaceA, "initial.txt"), "one\n", "utf-8");
+
+    const manager = await SessionBackupManager.create({
+      sessionId: "session-initial",
+      workingDirectory: workspaceA,
+      homedir: home,
+    });
+
+    const state = manager.getPublicState();
+    const initialCheckpoint = state.checkpoints[0];
+    expect(initialCheckpoint?.trigger).toBe("initial");
+
+    const deleted = await manager.deleteCheckpoint(initialCheckpoint!.id);
+    expect(deleted).toBe(false);
+
+    const afterDelete = manager.getPublicState();
+    expect(afterDelete.checkpoints).toHaveLength(1);
+    expect(afterDelete.checkpoints[0]?.id).toBe(initialCheckpoint!.id);
+  });
 });
