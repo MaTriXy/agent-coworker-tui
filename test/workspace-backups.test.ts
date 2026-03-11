@@ -339,8 +339,7 @@ describe("WorkspaceBackupService", () => {
     const initialCheckpoint = state.checkpoints[0];
     expect(initialCheckpoint?.trigger).toBe("initial");
 
-    const deleted = await manager.deleteCheckpoint(initialCheckpoint!.id);
-    expect(deleted).toBe(false);
+    await expect(manager.deleteCheckpoint(initialCheckpoint!.id)).rejects.toThrow("Cannot delete the initial checkpoint");
 
     const afterDelete = manager.getPublicState();
     expect(afterDelete.checkpoints).toHaveLength(1);

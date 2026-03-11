@@ -89,10 +89,14 @@ export async function summarizeSnapshotDelta(opts: {
   truncated: boolean;
 }> {
   const maxFiles = Math.max(1, Math.floor(opts.maxFiles ?? DEFAULT_MAX_FILES));
-  const baselineTree = await materializeSnapshot(opts.sessionDir, opts.baseline, ".delta-baseline-");
-  const currentTree = await materializeSnapshot(opts.sessionDir, opts.current, ".delta-current-");
+  
+  let baselineTree: { dir: string; entries: Map<string, SnapshotTreeEntry> } | undefined;
+  let currentTree: { dir: string; entries: Map<string, SnapshotTreeEntry> } | undefined;
 
   try {
+    baselineTree = await materializeSnapshot(opts.sessionDir, opts.baseline, ".delta-baseline-");
+    currentTree = await materializeSnapshot(opts.sessionDir, opts.current, ".delta-current-");
+
     const counts = { added: 0, modified: 0, deleted: 0 };
     const files: WorkspaceBackupDeltaFile[] = [];
     const allPaths = Array.from(new Set([...baselineTree.entries.keys(), ...currentTree.entries.keys()])).sort((left, right) =>
@@ -131,7 +135,7 @@ export async function summarizeSnapshotDelta(opts: {
       truncated: totalChanges > files.length,
     };
   } finally {
-    await fs.rm(baselineTree.dir, { recursive: true, force: true });
-    await fs.rm(currentTree.dir, { recursive: true, force: true });
+    if (baselineTree) await fs.rm(baselineTree.dir, { recursive: true, force: true });
+    if (currentTree) await fs.rm(currentTree.dir, { recursive: true, force: true });
   }
 }
