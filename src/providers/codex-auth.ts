@@ -593,6 +593,21 @@ export async function refreshCodexAuthMaterial(opts: {
     issuer: opts.material.issuer,
     clientId: opts.material.clientId,
   });
+
+  // Guard against concurrent refresh across processes: re-read the auth file
+  // and check if another process already wrote a fresh token while we were
+  // waiting for the token endpoint. If so, use theirs instead of overwriting.
+  const currentOnDisk = await readCodexAuthMaterial(opts.paths);
+  if (
+    currentOnDisk?.accessToken &&
+    currentOnDisk.updatedAt &&
+    opts.material.updatedAt &&
+    currentOnDisk.updatedAt > opts.material.updatedAt &&
+    !isTokenExpiring(currentOnDisk, 0)
+  ) {
+    return currentOnDisk;
+  }
+
   return await writeCodexAuthMaterial(opts.paths, {
     ...refreshed,
     refreshToken: refreshed.refreshToken ?? opts.material.refreshToken,

@@ -295,6 +295,7 @@ Returned in `server_hello` and `config_updated`:
 | `checkedAt` | `string` | ISO 8601 timestamp of last check |
 | `savedApiKeyMasks` | `Record<string, string>?` | Optional masked key values keyed by method id. Never includes raw secrets |
 | `usage` | `{ planType?: string, accountId?: string, email?: string, rateLimits: ProviderRateLimitSnapshot[] }?` | Optional backend usage snapshot data, currently populated for Codex OAuth verification |
+| `tokenRecoverable` | `boolean?` | When `authorized` is `false`, indicates the token is expired but a refresh token exists. Clients should avoid persisting a "not connected" state when this is `true`, since the next refresh attempt may succeed |
 
 ### TodoItem
 
