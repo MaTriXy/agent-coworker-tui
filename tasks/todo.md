@@ -1,3 +1,37 @@
+# Task: Investigate Codex auth disappearing after app restart
+
+## Plan
+- [x] Trace Codex auth read/write paths and confirm whether restart issues come from storage-path drift or from startup status/refresh behavior.
+- [x] Add regression coverage for recoverable expired Codex auth states and refresh races so restart handling stays correct.
+- [x] Run focused verification and record the confirmed root cause plus remaining risk below.
+
+## Review
+- Root cause is not a workspace-vs-global auth path mismatch. Codex auth is consistently read and written under `~/.cowork/auth/codex-cli/auth.json`, and the desktop server boot path keeps using the same home-derived Cowork root across launches.
+- The restart failure mode is an expired access token that still has a refresh token, combined with a transient refresh failure during startup. Before the recent fix, startup could treat that state as effectively disconnected and the desktop persistence layer could then cache the stale "not connected" snapshot, making the token look gone after closing and reopening the app even though the auth file was still present.
+- A second contributing risk is concurrent refresh across processes. The current auth refresh path now re-reads the on-disk auth file before writing so a stale process does not overwrite a newer token that another process already persisted.
+- Added focused regression coverage in `test/providerStatus.test.ts`, `test/providers/codex-auth.test.ts`, and `apps/desktop/test/persistence-state-sanitization.test.ts` for recoverable expired-token startup status, cross-process refresh races, and desktop persistence sanitization.
+- Verification:
+  - `~/.bun/bin/bun test test/providerStatus.test.ts test/providers/codex-auth.test.ts apps/desktop/test/persistence-state-sanitization.test.ts` -> pass (`28 pass, 0 fail`)
+  - `~/.bun/bin/bun run typecheck` -> pass
+
+# Task: Recover Codex auth into Cowork-owned storage
+
+## Plan
+- [x] Confirm the current Codex auth ownership gap and record the concrete legacy-vs-Cowork path mismatch.
+- [x] Update the Codex auth layer so Cowork canonicalizes legacy `~/.codex/auth.json` material into `~/.cowork/auth/codex-cli/auth.json` when our file is missing or unreadable.
+- [x] Add focused regression coverage for legacy import and Cowork-path persistence, then run the relevant Bun tests.
+- [x] Record the verified outcome below.
+
+## Review
+- The live machine state confirmed the ownership gap directly: `~/.cowork/auth/codex-cli/auth.json` was missing while `~/.codex/auth.json` still contained a valid access token plus refresh token. That meant Cowork looked logged out even though usable Codex auth still existed on disk.
+- `src/providers/codex-auth.ts` now treats Cowork auth as the canonical location but will import valid legacy `~/.codex/auth.json` material into `~/.cowork/auth/codex-cli/auth.json` whenever the Cowork file is missing or unreadable. Reads, provider status refresh, runtime auth, and reconnect flows now self-heal back into the Cowork-owned path.
+- Explicit Cowork logout now writes a local suppression marker so the next startup does not immediately re-import the legacy `.codex` token and undo the logout. Any fresh Cowork sign-in clears that marker when it writes the canonical auth file again.
+- Updated focused regressions in `test/connect.test.ts`, `test/providerStatus.test.ts`, `test/runtime.pi-runtime.test.ts`, and `test/providers/codex-auth.test.ts` to prove legacy Codex auth is rewritten into the Cowork path and then used from there.
+- Verification:
+  - `~/.bun/bin/bun test test/providers/codex-auth.test.ts test/connect.test.ts test/providerStatus.test.ts test/runtime.pi-runtime.test.ts` -> pass (`45 pass, 0 fail`)
+  - `~/.bun/bin/bun run typecheck` -> pass
+  - `git diff --check` -> pass
+
 # Task: Implement backup opt-out, whole-entry delete, and initial checkpoint seeding
 
 ## Plan
